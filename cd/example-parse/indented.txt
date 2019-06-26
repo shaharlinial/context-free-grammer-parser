@@ -1,0 +1,37 @@
+(TOP 
+  (S 
+    (ADVP 
+      (RB RCUB)
+    ) 
+    (VP 
+      (VB MWXZR)
+    ) 
+    (PP 
+      (IN ALI) 
+      (NP 
+        (PRP ATM)
+      )
+    ) 
+    (NP 
+      (NP 
+        (H H) 
+        (NN XWMR)
+      ) 
+      (SBAR 
+        (REL F) 
+        (S 
+          (VP 
+            (VB NFLX)
+          ) 
+          (PP 
+            (IN AL) 
+            (NP 
+              (PRP ANI)
+            )
+          )
+        )
+      )
+    ) 
+    (yyDOT yyDOT)
+  )
+)

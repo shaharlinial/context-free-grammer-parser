@@ -1,0 +1,1 @@
+flatten = lambda l: [i for s in l for i in s] # flattens a list of lists
