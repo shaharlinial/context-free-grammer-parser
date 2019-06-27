@@ -183,6 +183,7 @@ class Grammar(object):
                 rule = grammar_node.rule
                 old_key = key
 
+                self.heads_pointers[rule.head.tag].remove(key)
                 # example:
                 # s -> nn jj kk
                 # next = nn
@@ -196,6 +197,7 @@ class Grammar(object):
                 next.next = new_rule
                 # new_key = s->nn jj-kk
                 new_key = rule.hash()
+                self.heads_pointers[rule.head.tag].add(new_key)
                 # jj-kk -> jj kk
                 rule_node = RuleNode(tag=tag, next=temp, back=None)
                 rule = Rule(rule_node, is_reconstructed=True)
@@ -205,14 +207,17 @@ class Grammar(object):
                 # jj.back = jj-kk
                 temp.back = rule.head
                 # {jj-kk->jj kk, s->n jj-kk}
-
                 # we already changed the rule's next variables, so just copy the count and probability
                 new_grammar_dictionary = {new_grammar_key:new_grammar_rule,
                                           new_key: GrammarNode(rule, grammar_dictionary[old_key].count, grammar_dictionary[old_key].probability)}
                 # adds two new rules to binarise
                 grammar_dictionary.update(new_grammar_dictionary)
-                # removes the old one.
 
+                if tag not in self.heads_pointers:
+                    self.heads_pointers[tag] = set()
+                self.heads_pointers[tag].add(new_grammar_key)
+
+                # removes the old one.
                 del(grammar_dictionary[old_key])
                 return self.binarise(grammar_dictionary)
     def percolate(self, grammar_dictionary):
