@@ -79,13 +79,13 @@ class RuleNode(object):
 
     #returns the current tag chained by following tags "s->nn->jj" ==> "s-nn-jj"
     def chain_tags(self):
-        str = self.tag
+        chain = self.tag
         temp = self
 
         while temp.next is not None:
-            str += ('-' + temp.next.tag)
+            chain += ('-' + temp.next.tag)
             temp = temp.next
-        return str
+        return chain
 
 class Rule(object):
     def __init__(self, node, is_reconstructed=False, count=0, probability=0):
@@ -156,6 +156,8 @@ class Grammar(object):
             self.rules_dictionary[grammar_key].count += 1
         else:
             self.rules_dictionary[grammar_key] = GrammarNode(rule, count=1)
+
+        if rule.head.tag not in self.heads_pointers:
             self.heads_pointers[rule.head.tag] = set()
 
         self.heads_pointers[rule.head.tag].add(grammar_key)
