@@ -182,7 +182,7 @@ class Grammar(object):
             if len(grammar_node.rule) > 3:
                 rule = grammar_node.rule
                 old_key = key
-
+                new_grammar_dictionary = {}
                 self.heads_pointers[rule.head.tag].remove(key)
                 # example:
                 # s -> nn jj kk
@@ -197,7 +197,9 @@ class Grammar(object):
                 next.next = new_rule
                 # new_key = s->nn jj-kk
                 new_key = rule.hash()
+                new_grammar_dictionary[new_key] = GrammarNode(rule, grammar_dictionary[old_key].count, grammar_dictionary[old_key].probability)
                 self.heads_pointers[rule.head.tag].add(new_key)
+
                 # jj-kk -> jj kk
                 rule_node = RuleNode(tag=tag, is_head=True, next=temp, back=None)
                 rule = Rule(rule_node, is_reconstructed=True)
@@ -208,8 +210,7 @@ class Grammar(object):
                 temp.back = rule.head
                 # {jj-kk->jj kk, s->n jj-kk}
                 # we already changed the rule's next variables, so just copy the count and probability
-                new_grammar_dictionary = {new_grammar_key:new_grammar_rule,
-                                          new_key: GrammarNode(rule, grammar_dictionary[old_key].count, grammar_dictionary[old_key].probability)}
+                new_grammar_dictionary[new_grammar_key] = new_grammar_rule
                 # adds two new rules to binarise
                 grammar_dictionary.update(new_grammar_dictionary)
 
