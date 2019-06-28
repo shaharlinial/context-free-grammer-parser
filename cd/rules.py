@@ -237,7 +237,7 @@ class Grammar(object):
                 grammar_rule = grammar_node
                 # probability of S->VP
                 p1 = grammar_rule.probability
-
+                self.heads_pointers[grammar_rule.rule.head.tag].remove(old_key)
                 # percolated_key = VP
                 percolated_key = grammar_rule.rule.head.next.tag
                 # all possible new rules:
@@ -259,6 +259,7 @@ class Grammar(object):
                     new_grammar_rule = GrammarNode(new_rule, count=1, probability=p1*p2)
                     new_grammar_dictionary = {new_grammar_key: new_grammar_rule}
                     grammar_dictionary.update(new_grammar_dictionary)
+                    self.heads_pointers[grammar_rule.rule.head.tag].add(new_grammar_key)
 
                 del (grammar_dictionary[old_key])
                 return self.percolate(grammar_dictionary)
