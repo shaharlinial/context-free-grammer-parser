@@ -221,18 +221,19 @@ class Grammar(object):
                 # removes the old one.
                 del(grammar_dictionary[old_key])
                 return self.binarise(grammar_dictionary)
+
     def percolate(self, grammar_dictionary):
-        for key, grammar_node in grammar_dictionary:
+        for key, grammar_node in grammar_dictionary.items():
             # S -> VP
             if len(grammar_node.rule) == 2 and not grammar_node.rule.head.next.is_terminal:
                 # remove S -> VP
                 # ADD S -> populated(VP)
                 # search all VP -> XX YY
                 # grammar_dictionary[]
-
                 #example:
                 # S -> VP
                 # VP -> NN PP
+                old_key = key
                 grammar_rule = grammar_node
                 # probability of S->VP
                 p1 = grammar_rule.probability
@@ -243,15 +244,35 @@ class Grammar(object):
                 # all_hash_rules_for_percolated_key = ["VP->NN PP"]
                 all_hash_rules_for_percolated_key = self.heads_pointers[percolated_key]
                 for hash_rule in all_hash_rules_for_percolated_key:
+                    # TODO: what happens if percolated key "S->NN PP" Already exists in grammar? does it change the probability of the rule?
                     grammar_node = self.rules_dictionary[hash_rule]
-                    #TODO: what happens if percolated key "S->NN PP" Already exists in grammar? does it change the probability of the rule?
-                    # new_rule =
-                pass
+                    p2 = grammar_node.probability
+                    # make a new copy of the rule
+                    rule_copy = copy.deepcopy(grammar_node.rule)
+                    next = rule_copy.head.next
+                    new_rule_head = RuleNode(tag=grammar_rule.rule.head.tag,
+                                             is_head=True, next=next,
+                                             back=None, is_terminal=False)
+                    next.back = new_rule_head
+                    new_rule = Rule(new_rule_head, is_reconstructed=True)
+                    new_grammar_key = new_rule.hash()
+                    new_grammar_rule = GrammarNode(new_rule, count=1, probability=p1*p2)
+                    new_grammar_dictionary = {new_grammar_key: new_grammar_rule}
+                    grammar_dictionary.update(new_grammar_dictionary)
+
+                del (grammar_dictionary[old_key])
+                return self.percolate(grammar_dictionary)
+
+
+
+
+
 g = Grammar()
 g.build_grammar_from_tree(Tree().parse_tree(None, a_sentences[0]))
 g.build_grammar_from_tree((Tree().parse_tree(None, a_sentences[1])))
 g.calculate_probabilities()
 g.binarise(g.rules_dictionary)
+g.percolate(g.rules_dictionary)
 print(g)
 #class Rules(object):
 #    def __init__(self, rules={}):
