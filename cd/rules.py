@@ -199,7 +199,7 @@ class Grammar(object):
                 new_key = rule.hash()
                 self.heads_pointers[rule.head.tag].add(new_key)
                 # jj-kk -> jj kk
-                rule_node = RuleNode(tag=tag, next=temp, back=None)
+                rule_node = RuleNode(tag=tag, is_head=True, next=temp, back=None)
                 rule = Rule(rule_node, is_reconstructed=True)
                 new_grammar_rule = GrammarNode(rule, count=1, probability=1.0)
                 # new_grammar_key = jj-kk->jj kk
