@@ -5,7 +5,7 @@ sentences = "(TOP (S (yyQUOT yyQUOT) (S (VP (VB THIH)) (NP (NN NQMH)) (CC W) (AD
 (TOP (FRAG (NP (NP (MOD LA) (NP (NP (H H) (NN MNHIGIM)) (SBAR (REL F) (S (VP (VB HSITW)) (PP (IN L) (NP (NN RCX))))))) (CC (yySCLN yySCLN)) (NP (MOD LA) (NP (NP (NN XLQIM)) (PP (IN B) (NP (NP (H H) (NN CIBWR)) (ADJP (H H) (JJ ZH)))) (yyCM yyCM) (SBAR (REL F) (S (PP (IN LAWRK) (NP (NNT CIR) (NP (H H) (NN HLWWIIH)))) (VP (VB RQMW)) (NP (NP (NN TWKNIWT)) (SBAR (SQ (ADVP (QW KICD)) (VP (VB LPGWE) (PP (IN B) (NP (NN ERBIM)))) (PP (MOD KBR) (PP (IN B) (NP (NP (H H) (NN IMIM)) (ADJP (H H) (JJ QRWBIM))))))))))))) (yyDOT yyDOT))),\
 (TOP (S (NP (NP (NNT SWPR) (NP (yyQUOT yyQUOT) (NP (NNPP (H H) (NN ARC))) (yyQUOT yyQUOT))) (PP (IN B) (NP (H H) (NN CPWN)))) (yyCM yyCM) (VP (VB MWSIP)) (SBAR (yyCLN yyCLN) (S (NP (NN IRIWT)) (VP (VB NFMEW)) (ADVP (RB ATMWL)) (PP (IN B) (NP (NP (NN FEH)) (NP (CD 2000)) (PP (IN B) (NP (H H) (NN ERB))))) (PP (IN B) (NP (NNP FPREM))) (yyCM yyCM) (ADVP (ADVP (RB SMWK)) (PP (IN L) (NP (NP (NN BITW)) (POS FL) (NP (NP (NNT RAF) (NP (H H) (NN EIRIIH))) (yyCM yyCM) (NP (NNPP (NNP AIBRHIM) (NNPP (NNP NIMR) (NNP XWSIIN)))))))))) (yyDOT yyDOT))),\
 (TOP (S (NP (NN AIF)) (ADVP (RB LA)) (VP (VB NPGE)) (yyDOT yyDOT)))"
-
+from tqdm import tqdm
 a_sentences = sentences.split(",")
 
 class Node(object):
@@ -19,8 +19,8 @@ class Node(object):
         self.children.append(node)
 
 class Tree(object):
-    def __init__(self):
-        self.tree = None
+    def __init__(self, head=None):
+        self.tree = head
 
     @staticmethod
     def parse_string_sequence(string, special_key):
@@ -69,6 +69,25 @@ class Tree(object):
 
         return node
 
+
+
+    def build_tree_from_ckyrootNode(self, ckynode, parent=None):
+
+        # one time - create root of tree
+        if ckynode.left_child is None and ckynode.right_child is None:
+            # Todo: could is_terminal be false here?
+            return Node(tag=ckynode.tag, parent=parent, is_terminal=True)
+
+        parent = Node(ckynode.tag, parent=parent, is_terminal=False)
+
+        if self.tree is None:
+            self.tree = parent
+
+        parent.add_children(self.build_tree_from_ckyrootNode(ckynode.left_child, parent))
+        parent.add_children(self.build_tree_from_ckyrootNode(ckynode.right_child, parent))
+
+        return parent
+
 class RuleNode(object):
     def __init__(self, tag, is_head=False, next=None, back=None, is_terminal=False):
         self.tag = tag
@@ -88,11 +107,9 @@ class RuleNode(object):
         return chain
 
 class Rule(object):
-    def __init__(self, node, is_reconstructed=False, count=0, probability=0):
+    def __init__(self, node, is_reconstructed=False):
         self.head = node
         self.is_reconstructed = is_reconstructed
-        self.count = count
-        self.probability = probability
 
     def insert(self, node):
         temp = self.head
@@ -111,6 +128,17 @@ class Rule(object):
             if temp.next is not None:
                 hash_key += " "
         return hash_key
+
+    # to prevent NP->NP | SBAR->SBAR
+    def is_circular(self):
+        if self.head.next is None:
+            return False
+        if self.head.tag == self.head.next.tag:
+            if self.head.next.is_terminal:
+                return False
+            else:
+                return True
+        return False
 
     def __len__(self):
         if self.head is None:
@@ -132,7 +160,9 @@ class Grammar(object):
     def __init__(self):
         self.heads_count = dict() # "{s:80, np:90}"
         self.heads_pointers = dict() # "{s:set("s->vp nn","s->yyqout yyquot"...)}"
+        self.tails_pointers = dict() # "{jj-kk-mm: set("x->y jj-kk-mm..")}
         self.rules_dictionary = dict()  # 'hash(rule):grammar_node'
+
 
     def build_grammar_from_tree(self, tree_head):
         #process tree... -> self.rule_list = TREE_PROCCESSED
@@ -178,16 +208,25 @@ class Grammar(object):
         # NP -> vp nn PROB: 0.6
         # s-> vp nn 0.3*0.6
         #[Rule,Rule,Rule...]
+        stack = list()
+        grammar = dict()
+
         for key, grammar_node in grammar_dictionary.items():
+            stack.append(grammar_node)
+
+        while len(stack) > 0:
+            # {s -> nn jj kk } PROB: 0.5
+            # {s -> nn jj kk}
+            grammar_node = stack.pop()
             if len(grammar_node.rule) > 3:
-                rule = grammar_node.rule
-                old_key = key
-                new_grammar_dictionary = {}
-                self.heads_pointers[rule.head.tag].remove(key)
+                # remove the key "S-> nn jj kk" from pointers["S"]
+                if grammar_node.rule.head.tag in self.heads_pointers and \
+                    grammar_node.rule.hash() in self.heads_pointers[grammar_node.rule.head.tag]:
+                    self.heads_pointers[grammar_node.rule.head.tag].remove(grammar_node.rule.hash())
                 # example:
                 # s -> nn jj kk
                 # next = nn
-                next = rule.head.next
+                next = grammar_node.rule.head.next
                 # temp = jj
                 temp = next.next
                 # tag = jj-kk
@@ -195,87 +234,132 @@ class Grammar(object):
                 new_rule = RuleNode(tag=tag, next=None, back=next)
                 # s -> nn jj-kk
                 next.next = new_rule
-                # new_key = s->nn jj-kk
-                new_key = rule.hash()
-                new_grammar_dictionary[new_key] = GrammarNode(rule, grammar_dictionary[old_key].count, grammar_dictionary[old_key].probability)
-                self.heads_pointers[rule.head.tag].add(new_key)
-
                 # jj-kk -> jj kk
                 rule_node = RuleNode(tag=tag, is_head=True, next=temp, back=None)
                 rule = Rule(rule_node, is_reconstructed=True)
                 new_grammar_rule = GrammarNode(rule, count=1, probability=1.0)
-                # new_grammar_key = jj-kk->jj kk
-                new_grammar_key = rule.hash()
                 # jj.back = jj-kk
                 temp.back = rule.head
-                # {jj-kk->jj kk, s->n jj-kk}
+
+                # {jj-kk->jj kk, s->nn jj-kk}
                 # we already changed the rule's next variables, so just copy the count and probability
-                new_grammar_dictionary[new_grammar_key] = new_grammar_rule
-                # adds two new rules to binarise
-                grammar_dictionary.update(new_grammar_dictionary)
+                stack.append(grammar_node)
+                self.heads_pointers[grammar_node.rule.head.tag].add(grammar_node.rule.hash())
 
-                if tag not in self.heads_pointers:
-                    self.heads_pointers[tag] = set()
-                self.heads_pointers[tag].add(new_grammar_key)
+                stack.append(new_grammar_rule)
+                if new_grammar_rule.rule.head.tag not in self.heads_pointers:
+                    self.heads_pointers[new_grammar_rule.rule.head.tag] = set()
+                self.heads_pointers[new_grammar_rule.rule.head.tag].add(new_grammar_rule.rule.hash())
 
-                # removes the old one.
-                del(grammar_dictionary[old_key])
-                return self.binarise(grammar_dictionary)
+
+
+            else:
+                grammar.update({grammar_node.rule.hash():grammar_node})
+                if grammar_node.rule.head.tag not in self.heads_pointers:
+                    self.heads_pointers[grammar_node.rule.head.tag] = set()
+                self.heads_pointers[grammar_node.rule.head.tag].add(grammar_node.rule.hash())
+
+        self.rules_dictionary = grammar
+
+
 
     def percolate(self, grammar_dictionary):
+        stack = list()
+        grammar = dict()
         for key, grammar_node in grammar_dictionary.items():
             # S -> VP
+            # push all grammar to stack
+
+            stack.append(grammar_node)
+
+        while len(stack) > 0:
+            #grammar_node = S->VP
+            grammar_node = stack.pop()
+
             if len(grammar_node.rule) == 2 and not grammar_node.rule.head.next.is_terminal:
                 # remove S -> VP
                 # ADD S -> populated(VP)
                 # search all VP -> XX YY
                 # grammar_dictionary[]
+
                 #example:
                 # S -> VP
                 # VP -> NN PP
-                old_key = key
-                grammar_rule = grammar_node
+                # VP -> A
+
+                # old_key = S->VP
+                old_key = grammar_node.rule.hash()
+
                 # probability of S->VP
-                p1 = grammar_rule.probability
-                self.heads_pointers[grammar_rule.rule.head.tag].remove(old_key)
+                p1 = grammar_node.probability
+
+                # remove from pointers of S :  S->VP
+                if grammar_node.rule.head.tag in self.heads_pointers and \
+                        grammar_node.rule.hash() in self.heads_pointers[grammar_node.rule.head.tag]:
+                    self.heads_pointers[grammar_node.rule.head.tag].remove(old_key)
+
                 # percolated_key = VP
-                percolated_key = grammar_rule.rule.head.next.tag
+                percolated_key = grammar_node.rule.head.next.tag
                 # all possible new rules:
                 # all_hash_rules_for_percolated_key = ["VP->NN PP"]
                 all_hash_rules_for_percolated_key = self.heads_pointers[percolated_key]
                 for hash_rule in all_hash_rules_for_percolated_key:
-                    # TODO: what happens if percolated key "S->NN PP" Already exists in grammar? does it change the probability of the rule?
-                    grammar_node = self.rules_dictionary[hash_rule]
-                    p2 = grammar_node.probability
+                    # (i=1) Brings VP->NN PP
+                    # (i=2) Brings VP->A
+                    temp_grammar_node = self.rules_dictionary[hash_rule]
+                    p2 = temp_grammar_node.probability
                     # make a new copy of the rule
-                    rule_copy = copy.deepcopy(grammar_node.rule)
+                    # rule_copy = copy of VP -> NN PP
+                    rule_copy = copy.deepcopy(temp_grammar_node.rule)
+                    # next = NN
                     next = rule_copy.head.next
-                    new_rule_head = RuleNode(tag=grammar_rule.rule.head.tag,
+                    # new rule_head = S
+                    new_rule_head = RuleNode(tag=grammar_node.rule.head.tag,
                                              is_head=True, next=next,
                                              back=None, is_terminal=False)
+                    # NN.back = S
                     next.back = new_rule_head
+                    # S -> NN PP
                     new_rule = Rule(new_rule_head, is_reconstructed=True)
-                    new_grammar_key = new_rule.hash()
-                    new_grammar_rule = GrammarNode(new_rule, count=1, probability=p1*p2)
-                    new_grammar_dictionary = {new_grammar_key: new_grammar_rule}
-                    grammar_dictionary.update(new_grammar_dictionary)
-                    self.heads_pointers[grammar_rule.rule.head.tag].add(new_grammar_key)
 
-                del (grammar_dictionary[old_key])
-                return self.percolate(grammar_dictionary)
+                    if not new_rule.is_circular() and new_rule.hash() not in grammar_dictionary:
+                        # set new grammar rule
+                        new_grammar_rule = GrammarNode(new_rule, count=1, probability=p1*p2)
+
+                        # add rules to test percolation
+                        # new_grammar_dictionary = {new_grammar_key: new_grammar_rule}
+                        self.heads_pointers[new_grammar_rule.rule.head.tag].add(new_grammar_rule.rule.hash())
+                        stack.append(new_grammar_rule)
+
+            else:
+                grammar.update({grammar_node.rule.hash():grammar_node})
+                self.heads_pointers[grammar_node.rule.head.tag].add(grammar_node.rule.hash())
+
+        self.rules_dictionary = grammar
+
+    #def build_tails(self):
+    # root : SBAR-yyDOT ==> TOP => NP SBAR YYDOT
+    #
+    def to_rule_search(self, to_rule):
+       # find all X such that X -> to_rule
+       li = list()
+       for key, gn in self.rules_dictionary.items():
+           temp = gn.rule.head.next
+           if temp.chain_tags() == to_rule:
+               li.append(gn)
+       return li
 
 
 
 
-
-g = Grammar()
-g.build_grammar_from_tree(Tree().parse_tree(None, a_sentences[0]))
-g.build_grammar_from_tree((Tree().parse_tree(None, a_sentences[1])))
-g.calculate_probabilities()
-g.binarise(g.rules_dictionary)
-g.percolate(g.rules_dictionary)
-print(g)
-#class Rules(object):
+#g = Grammar()
+#g.build_grammar_from_tree(Tree().parse_tree(None, a_sentences[0]))
+#g.build_grammar_from_tree((Tree().parse_tree(None, a_sentences[1])))
+#g.calculate_probabilities()
+#g.binarise(g.rules_dictionary)
+#g.percolate(g.rules_dictionary)
+#print(g)
+##class Rules(object):
 #    def __init__(self, rules={}):
 #        self.rules = rules
 #
