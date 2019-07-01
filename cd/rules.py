@@ -6,6 +6,7 @@ sentences = "(TOP (S (yyQUOT yyQUOT) (S (VP (VB THIH)) (NP (NN NQMH)) (CC W) (AD
 (TOP (S (NP (NP (NNT SWPR) (NP (yyQUOT yyQUOT) (NP (NNPP (H H) (NN ARC))) (yyQUOT yyQUOT))) (PP (IN B) (NP (H H) (NN CPWN)))) (yyCM yyCM) (VP (VB MWSIP)) (SBAR (yyCLN yyCLN) (S (NP (NN IRIWT)) (VP (VB NFMEW)) (ADVP (RB ATMWL)) (PP (IN B) (NP (NP (NN FEH)) (NP (CD 2000)) (PP (IN B) (NP (H H) (NN ERB))))) (PP (IN B) (NP (NNP FPREM))) (yyCM yyCM) (ADVP (ADVP (RB SMWK)) (PP (IN L) (NP (NP (NN BITW)) (POS FL) (NP (NP (NNT RAF) (NP (H H) (NN EIRIIH))) (yyCM yyCM) (NP (NNPP (NNP AIBRHIM) (NNPP (NNP NIMR) (NNP XWSIIN)))))))))) (yyDOT yyDOT))),\
 (TOP (S (NP (NN AIF)) (ADVP (RB LA)) (VP (VB NPGE)) (yyDOT yyDOT)))"
 from tqdm import tqdm
+import time
 a_sentences = sentences.split(",")
 
 class Node(object):
@@ -29,6 +30,16 @@ class Tree(object):
     @staticmethod
     def parse_string_reverse_sequence(string, special_key):
         return string[string.index(special_key) + 1:]
+
+    def print_tree(self, treeNode):
+        if len(treeNode.children) != 0:
+            print("(")
+            print(treeNode.tag)
+            for child in treeNode.children:
+                self.print_tree(child)
+            print(")")
+        else:
+            print(treeNode.tag)
 
     def parse_tree(self, parent, bracket_sentence):
         if parent is not None and parent.is_terminal == True:
@@ -83,8 +94,10 @@ class Tree(object):
         if self.tree is None:
             self.tree = parent
 
-        parent.add_children(self.build_tree_from_ckyrootNode(ckynode.left_child, parent))
-        parent.add_children(self.build_tree_from_ckyrootNode(ckynode.right_child, parent))
+        if ckynode.left_child is not None:
+            parent.add_children(self.build_tree_from_ckyrootNode(ckynode.left_child, parent))
+        if ckynode.right_child is not None:
+            parent.add_children(self.build_tree_from_ckyrootNode(ckynode.right_child, parent))
 
         return parent
 
@@ -129,7 +142,7 @@ class Rule(object):
                 hash_key += " "
         return hash_key
 
-    # to prevent NP->NP | SBAR->SBAR
+    # to prevent NP->NP | SBAR->SBAR | A -> B  | B -> C | C -> A
     def is_circular(self):
         if self.head.next is None:
             return False
@@ -208,8 +221,7 @@ class Grammar(object):
         # NP -> vp nn PROB: 0.6
         # s-> vp nn 0.3*0.6
         #[Rule,Rule,Rule...]
-        currentDT = datetime.datetime.now()
-        print(str(currentDT) + "start binarise ")
+        currentDT = time.time()
 
         stack = list()
 
@@ -267,8 +279,7 @@ class Grammar(object):
                 self.heads_pointers[new_grammar_rule.rule.head.tag].add(new_grammar_rule.rule.hash())
 
         # stack is empty, all rules binarised.
-        currentDT = datetime.datetime.now()
-        print(str(currentDT) + " finished binarise")
+        print("Binarize finished in %s " % (time.time() - currentDT))
 
 
 

@@ -40,52 +40,60 @@ def probabilistic_cky(words,grammar):
     rules_dictionary = grammar.rules_dictionary
     # iterate words
     for j, word in enumerate(words):
-        print("j = "+str(j))
         # iterate rule
-        for grammar_rule in rules_dictionary.values():
+        #for grammar_rule in rules_dictionary.values():
+        # fill rule->words
+        for head in grammar.heads_pointers:
             # Search for rules of this form: X -> word [terminal]
             # rule_node = y <-> X->y
-            rule_node = grammar_rule.rule.head.next
-            if rule_node.is_terminal and rule_node.tag == word:
+            search_rule = head + "->" + word
+            if search_rule in rules_dictionary:
+                grammar_rule = rules_dictionary[search_rule]
+                # grammar_rule = X->word
+                # rule_key = X
                 rule_key = grammar_rule.rule.head.tag
-                cky_node = CkyNode(grammar_rule.rule.head.tag, grammar_rule, grammar_rule.probability, (j, j+1))
+                # "X: X->word"
+                to_word = CkyNode(tag=grammar_rule.rule.head.next.tag,
+                                  grammar_rule=None,
+                                  probability=0.0,
+                                  span=None,
+                                  left_child=None,
+                                  right_child=None)
+
+                cky_node = CkyNode(tag=grammar_rule.rule.head.tag,
+                                   grammar_rule=grammar_rule,
+                                   probability=grammar_rule.probability,
+                                   span=(j, j+1),
+                                   left_child=to_word,
+                                   right_child=None)
+
+
                 new_dict = {rule_key: cky_node}
                 #table[j][j] = {"s":CkyNode} --> table[j][j] = {"s":CkyNode, "np":CkyNode}
                 table[j][j].update(new_dict)
-                print("table["+str(j)+"]["+str(j)+"] = "+rule_key)
 
-        # second part of algorithm
+        # second part of algorithm // fill rules->rules
         for i in range(j-1, -1, -1):
-            print("i = "+str(i))
             for k in range(i+1, j+1, 1):
-                print("k = "+str(k))
                 for left_node in table[i][k-1].values():
-                    left_tag = left_node.grammar_rule.rule.head.tag
-                    print("left tag = "+left_tag)
+                    left_tag = left_node.tag
                     for right_node in table[k][j].values():
-                        right_tag = right_node.grammar_rule.rule.head.tag
-                        print("right tag = "+right_tag)
+                        right_tag = right_node.tag
                         for head, rule_set in grammar.heads_pointers.items():
                             key = head+"->"+left_tag+" "+right_tag
                             if key in rules_dictionary:
-                                print("rule = "+key)
                                 grammar_rule = rules_dictionary[key]
                                 p2 = grammar_rule.probability * left_node.probability * right_node.probability
-                                print("table["+str(i)+"]["+str(j)+"] :")
-                                for var in table[i][j]:
-                                    print(var)
                                 if head in table[i][j]:
                                     head_cky_node = table[i][j][head]
                                     p1 = head_cky_node.probability
                                     if p1 < p2:
                                         table[i][j][head] = CkyNode(head_cky_node.tag, grammar_rule, p2, (i, j+1), left_node, right_node)
                                         back[i][j] = {head: [k, left_node, right_node]}
-                                        print("add to table[" + str(i) + "][" + str(j) + "] :"+head)
                                 else:
                                     # put new rule in table[i][j]
                                     table[i][j][head] = CkyNode(head, grammar_rule, p2, (i, j+1), left_node, right_node)
                                     back[i][j] = {head: [k, left_node, right_node]}
-                                    print("add to table[" + str(i) + "][" + str(j) + "] :" + head)
 
     # Building tree.
     # phase 1: select max probability root ->
@@ -94,6 +102,7 @@ def probabilistic_cky(words,grammar):
     tree_head = Tree()
     # phase 2: -> recursively build left and right children
     tree_head.build_tree_from_ckyrootNode(root)
+    tree_head.print_tree(tree_head.tree)
     print("y")
 
     # TODO return BUILD TREE(back[1, LENGTH(words), S]), table[1, LENGTH(words), S]
@@ -109,11 +118,18 @@ with open('data/heb-ctrees_small.train', 'r') as train_set:
 
 
 g.calculate_probabilities()
-g.binarise(g.rules_dictionary)
-g.percolate(g.rules_dictionary)
+g.binarise()
+g.percolate()
 new_sentence = "AIF LA NPGE yyDOT".split(" ")
+#(TOP (S (NP (NN AIF)) (ADVP (RB LA)) (VP (VB NPGE)) (yyDOT yyDOT)))
+new_sentence1 = "XBL yyDOT".split(" ")
+#(TOP (FRAG (INTJ (ADVP (RB XBL))) (yyDOT yyDOT)))
+new_sentence2 = "MSTBR F HIITI TMIM yyDOT".split(" ")
+#(TOP (S (VP (VB MSTBR)) (SBAR (COM F) (S (AUX HIITI) (PREDP (ADJP (JJ TMIM))))) (yyDOT yyDOT)))
 
-probabilistic_cky(new_sentence, g)
+#probabilistic_cky(new_sentence, g)
+#probabilistic_cky(new_sentence1, g)
+probabilistic_cky(new_sentence2, g)
 
 
 
