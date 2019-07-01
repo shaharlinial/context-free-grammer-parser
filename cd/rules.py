@@ -198,7 +198,7 @@ class Grammar(object):
         for key, grammar_rule in self.rules_dictionary.items():
             grammar_rule.probability = grammar_rule.count / self.heads_count[grammar_rule.rule.head.tag]
 
-    def binarise(self, grammar_dictionary):
+    def binarise(self):
         #{s -> nn jj kk } PROB: 0.5
         # s->nn JJKK PROB:0.5
         # np-> nn jj kk PROB:0.4
@@ -208,105 +208,118 @@ class Grammar(object):
         # NP -> vp nn PROB: 0.6
         # s-> vp nn 0.3*0.6
         #[Rule,Rule,Rule...]
-        stack = list()
-        grammar = dict()
+        currentDT = datetime.datetime.now()
+        print(str(currentDT) + "start binarise ")
 
-        for key, grammar_node in grammar_dictionary.items():
-            stack.append(grammar_node)
+        stack = list()
+
+        # push to stack rules that require binarisation
+        for grammar_node in self.rules_dictionary.values():
+            if len(grammar_node.rule) > 3:
+                stack.append(grammar_node)
 
         while len(stack) > 0:
             # {s -> nn jj kk } PROB: 0.5
             # {s -> nn jj kk}
             grammar_node = stack.pop()
-            if len(grammar_node.rule) > 3:
-                # remove the key "S-> nn jj kk" from pointers["S"]
-                if grammar_node.rule.head.tag in self.heads_pointers and \
-                    grammar_node.rule.hash() in self.heads_pointers[grammar_node.rule.head.tag]:
-                    self.heads_pointers[grammar_node.rule.head.tag].remove(grammar_node.rule.hash())
-                # example:
-                # s -> nn jj kk
-                # next = nn
-                next = grammar_node.rule.head.next
-                # temp = jj
-                temp = next.next
-                # tag = jj-kk
-                tag = temp.chain_tags()
-                new_rule = RuleNode(tag=tag, next=None, back=next)
-                # s -> nn jj-kk
-                next.next = new_rule
-                # jj-kk -> jj kk
-                rule_node = RuleNode(tag=tag, is_head=True, next=temp, back=None)
-                rule = Rule(rule_node, is_reconstructed=True)
-                new_grammar_rule = GrammarNode(rule, count=1, probability=1.0)
-                # jj.back = jj-kk
-                temp.back = rule.head
 
-                # {jj-kk->jj kk, s->nn jj-kk}
-                # we already changed the rule's next variables, so just copy the count and probability
-                stack.append(grammar_node)
-                self.heads_pointers[grammar_node.rule.head.tag].add(grammar_node.rule.hash())
+            # remove the value "S-> nn jj kk" from pointers["S"]
+            if grammar_node.rule.head.tag in self.heads_pointers and \
+                grammar_node.rule.hash() in self.heads_pointers[grammar_node.rule.head.tag]:
+                self.heads_pointers[grammar_node.rule.head.tag].remove(grammar_node.rule.hash())
+            # remove the key "S-> nn jj kk" from rules_dictionary
+            if grammar_node.rule.hash() in self.rules_dictionary:
+                del self.rules_dictionary[grammar_node.rule.hash()]
+            # example:
+            # s -> nn jj kk
+            # next = nn
+            next = grammar_node.rule.head.next
+            # temp = jj
+            temp = next.next
+            # tag = jj-kk
+            tag = temp.chain_tags()
+            new_rule = RuleNode(tag=tag, next=None, back=next)
+            # s -> nn jj-kk
+            next.next = new_rule
 
+            # grammar_node is fixed. Add the fixed rule to rules_dictionary and update heads_pointers
+            new_dict = {grammar_node.rule.hash(): grammar_node}
+            self.rules_dictionary.update(new_dict)
+            if grammar_node.rule.head.tag not in self.heads_pointers:
+                self.heads_pointers[grammar_node.rule.head.tag] = set()
+            self.heads_pointers[grammar_node.rule.head.tag].add(grammar_node.rule.hash())
+
+            # jj-kk -> jj kk
+            rule_node = RuleNode(tag=tag, is_head=True, next=temp, back=None)
+            rule = Rule(rule_node, is_reconstructed=True)
+            new_grammar_rule = GrammarNode(rule, count=1, probability=1.0)
+            # jj.back = jj-kk
+            temp.back = rule.head
+
+            # if new_grammar_rule is not in cnf put it in the stack. Otherwise add to rules_dictionary and heads_pointers
+            if len(new_grammar_rule.rule) > 3:
                 stack.append(new_grammar_rule)
+            else:
+                new_dict = {new_grammar_rule.rule.hash(): new_grammar_rule}
+                self.rules_dictionary.update(new_dict)
                 if new_grammar_rule.rule.head.tag not in self.heads_pointers:
                     self.heads_pointers[new_grammar_rule.rule.head.tag] = set()
                 self.heads_pointers[new_grammar_rule.rule.head.tag].add(new_grammar_rule.rule.hash())
 
-
-
-            else:
-                grammar.update({grammar_node.rule.hash():grammar_node})
-                if grammar_node.rule.head.tag not in self.heads_pointers:
-                    self.heads_pointers[grammar_node.rule.head.tag] = set()
-                self.heads_pointers[grammar_node.rule.head.tag].add(grammar_node.rule.hash())
-
-        self.rules_dictionary = grammar
+        # stack is empty, all rules binarised.
+        currentDT = datetime.datetime.now()
+        print(str(currentDT) + " finished binarise")
 
 
 
-    def percolate(self, grammar_dictionary):
+
+    def percolate(self):
+
         stack = list()
-        grammar = dict()
-        for key, grammar_node in grammar_dictionary.items():
+        for grammar_node in self.rules_dictionary.values():
             # S -> VP
-            # push all grammar to stack
-
-            stack.append(grammar_node)
-
+            # push rules to perlocate
+            if len(grammar_node.rule) == 2 and not grammar_node.rule.head.next.is_terminal and\
+                    not grammar_node.rule.head.tag == grammar_node.rule.head.next.tag:
+                stack.append(grammar_node)
+        i = 0
         while len(stack) > 0:
+            print(str(i) + " : stack size " + str(len(stack)))
             #grammar_node = S->VP
             grammar_node = stack.pop()
+            print(" old rule " + grammar_node.rule.hash())
+            # remove S -> VP
+            # ADD S -> populated(VP)
+            # search all VP -> XX YY
 
-            if len(grammar_node.rule) == 2 and not grammar_node.rule.head.next.is_terminal:
-                # remove S -> VP
-                # ADD S -> populated(VP)
-                # search all VP -> XX YY
-                # grammar_dictionary[]
+            #example:
+            # S -> VP
+            # VP -> NN PP
+            # VP -> A
 
-                #example:
-                # S -> VP
-                # VP -> NN PP
-                # VP -> A
+            # probability of S->VP
+            p1 = grammar_node.probability
 
-                # old_key = S->VP
-                old_key = grammar_node.rule.hash()
+            # percolated_key = VP
+            percolated_key = grammar_node.rule.head.next.tag
+            # all possible new rules:
+            # all_hash_rules_for_percolated_key = ["VP->NN PP"]
+            all_hash_rules_for_percolated_key = self.heads_pointers[percolated_key]
 
-                # probability of S->VP
-                p1 = grammar_node.probability
+            print(" num of replace rules " + str(len(all_hash_rules_for_percolated_key)))
+            rules_to_percolate = list()
+            for hash_rule in all_hash_rules_for_percolated_key:
+                # (i=1) Brings VP->NN PP
+                # (i=2) Brings VP->A
+                temp_grammar_node = self.rules_dictionary[hash_rule]
 
-                # remove from pointers of S :  S->VP
-                if grammar_node.rule.head.tag in self.heads_pointers and \
-                        grammar_node.rule.hash() in self.heads_pointers[grammar_node.rule.head.tag]:
-                    self.heads_pointers[grammar_node.rule.head.tag].remove(old_key)
-
-                # percolated_key = VP
-                percolated_key = grammar_node.rule.head.next.tag
-                # all possible new rules:
-                # all_hash_rules_for_percolated_key = ["VP->NN PP"]
-                all_hash_rules_for_percolated_key = self.heads_pointers[percolated_key]
-                for hash_rule in all_hash_rules_for_percolated_key:
-                    # (i=1) Brings VP->NN PP
-                    # (i=2) Brings VP->A
-                    temp_grammar_node = self.rules_dictionary[hash_rule]
+                # if this rule(temp_grammar_node) needs percolation save in list
+                # this rule is also in the stack
+                if len(temp_grammar_node.rule) == 2 and not temp_grammar_node.rule.head.next.is_terminal:
+                    if temp_grammar_node in stack:
+                        rules_to_percolate.append(temp_grammar_node)
+                        stack.remove(temp_grammar_node)
+                else:
                     p2 = temp_grammar_node.probability
                     # make a new copy of the rule
                     # rule_copy = copy of VP -> NN PP
@@ -322,20 +335,37 @@ class Grammar(object):
                     # S -> NN PP
                     new_rule = Rule(new_rule_head, is_reconstructed=True)
 
-                    if not new_rule.is_circular() and new_rule.hash() not in grammar_dictionary:
+                    if not new_rule.is_circular() and new_rule.hash() not in self.rules_dictionary:
                         # set new grammar rule
-                        new_grammar_rule = GrammarNode(new_rule, count=1, probability=p1*p2)
-
-                        # add rules to test percolation
+                        new_grammar_rule = GrammarNode(new_rule, count=1, probability=p1 * p2)
                         # new_grammar_dictionary = {new_grammar_key: new_grammar_rule}
+                        new_dict = {new_grammar_rule.rule.hash(): new_grammar_rule}
+                        self.rules_dictionary.update(new_dict)
+                        if new_grammar_rule.rule.head.tag not in self.heads_pointers:
+                            self.heads_pointers[new_grammar_rule.rule.head.tag] = set()
                         self.heads_pointers[new_grammar_rule.rule.head.tag].add(new_grammar_rule.rule.hash())
-                        stack.append(new_grammar_rule)
 
-            else:
-                grammar.update({grammar_node.rule.hash():grammar_node})
-                self.heads_pointers[grammar_node.rule.head.tag].add(grammar_node.rule.hash())
+            # we are finished with grammar_node. remove from dictionary and heads
+            key = grammar_node.rule.hash()
+            if key in self.rules_dictionary:
+                del self.rules_dictionary[key]
+            if grammar_node.rule.head.tag in self.heads_pointers:
+                rule_set = self.heads_pointers[grammar_node.rule.head.tag]
+                if key in rule_set:
+                    rule_set.remove(key)
+            if len(rules_to_percolate) > 0:
+                print(" num of replacement rules to percolate "+str(len(rules_to_percolate)))
+                # If rules to percolate not empty push grammar_rule back and push rules_to_percolate on top
+                stack.append(grammar_node)
+                stack.extend(rules_to_percolate)
+                rules_to_percolate.clear()
+            i += 1
+        # stack is empty, all rules percolated.
+        print(" finished percolate")
 
-        self.rules_dictionary = grammar
+
+
+
 
     #def build_tails(self):
     # root : SBAR-yyDOT ==> TOP => NP SBAR YYDOT
@@ -348,159 +378,6 @@ class Grammar(object):
            if temp.chain_tags() == to_rule:
                li.append(gn)
        return li
-
-
-
-
-#g = Grammar()
-#g.build_grammar_from_tree(Tree().parse_tree(None, a_sentences[0]))
-#g.build_grammar_from_tree((Tree().parse_tree(None, a_sentences[1])))
-#g.calculate_probabilities()
-#g.binarise(g.rules_dictionary)
-#g.percolate(g.rules_dictionary)
-#print(g)
-##class Rules(object):
-#    def __init__(self, rules={}):
-#        self.rules = rules
-#
-#    def tree_to_dict(self, node):
-#
-#        if node is None or node.is_terminal:
-#            return
-#
-#        parent_tag = node.tag
-#        children_tags = tuple(child.tag for child in node.children)
-#        count = 1
-#
-#        if self.rules is None:
-#            self.rules = dict()
-#
-#        if parent_tag in self.rules:
-#            children = self.rules.get(parent_tag)
-#            if children_tags in children:
-#                count = children.get(children_tags)
-#                count += 1
-#            children[children_tags] = count
-#        else:
-#            self.rules[parent_tag] = {children_tags: count}
-#
-#        for child in node.children:
-#            self.tree_to_dict(child)
-#
-#        return self.rules
-#
-#    def calc_rule_probabilities(self, rules):
-#        sum = 0
-#        for tag in rules:
-#            for child_count in tag.values():
-#                sum += child_count
-#            for child in tag:
-#                tag[child] = tag[child] / sum
-#            sum = 0
-#
-#        return rules
-#
-#    ## make a copy of rules
-#    ## hold class var with num of dummy vars
-#    def binarise(self, rules):
-#        dummy_count = 0
-#        updated_rules = {}
-#        for parent, children in rules.items():
-#            for child in children:
-#                new_parent = parent
-#                child_len = len(child)
-#                if child_len > 2:
-#                    probability = rules[parent][child]
-#                    for i in range(child_len - 2):
-#                        dummy_var = 'dummy_var_'+str(dummy_count)
-#                        dummy_count += 1
-#                        new_child = tuple((child[i], dummy_var))
-#                        if new_parent not in updated_rules:
-#                            new_entry = {new_parent: {new_child: probability}}
-#                            updated_rules.update(new_entry)
-#                        else:
-#                            updated_rules[new_parent][new_child] = probability
-#                        print(new_parent+':'+'('+child[i] + ',' + dummy_var + ')'+'='+str(probability))
-#                        probability = 1
-#                        new_parent = dummy_var
-#                    new_child = tuple((child[child_len-2], child[child_len-1]))
-#                    new_entry = {new_parent: {new_child: probability}}
-#                    print(new_parent + ':' + '(' + child[child_len-2] + ',' + child[child_len-1] + ')' + '=' + str(probability))
-#                    updated_rules.update(new_entry)
-#
-#        keys = rules.keys()
-#
-#        for parent in keys:
-#            delete = [key for key in rules[parent] if len(key) > 2]
-#            for child in delete:
-#                del rules[parent][child]
-#
-#        rules.update(updated_rules)
-#
-#        return rules
-#
-#    def percolate(self, rules):
-#        ## if single child not in rules.keys ==> child is a terminal
-#        ## if there are non-terminals with terminal names ==> change non terminal to some dummy variable
-#        keys = rules.keys()
-#        updated_rules = {}
-#        delete = []
-#        count = 0
-#        while True:
-#            is_cnf = True
-#            for parent in keys:
-#                children_keys = rules[parent].keys()
-#                for child_key in children_keys:
-#                    if len(child_key) == 1 and child_key[0] in rules:
-#                        is_cnf = False
-#                        probability = rules[parent][child_key]
-#                        child_rule = rules[child_key[0]]
-#                        child_rule_copy = copy.deepcopy(child_rule)
-#                        for rule in child_rule_copy:
-#                            child_rule_copy[rule] = child_rule[rule]*probability
-#                        if parent not in updated_rules:
-#                            new_entry = {parent: child_rule_copy}
-#                            updated_rules.update(new_entry)
-#                        else:
-#                            updated_rules[parent][child_rule[rule]] = probability
-#                        delete.append((parent, child_key))
-#            if is_cnf is True or count == 3:
-#                break
-#            for rule in delete:
-#                del rules[rule[0]][rule[1]]
-#            rules.update(updated_rules)
-#            delete.clear()
-#            updated_rules.clear()
-#            count += 1
-#
-#        return rules
-#
-#
-#
-#
-#def parse_sentences():
-#    tree_list = []
-#    rules = {}
-#
-#    t = Tree().parse_tree(None, a_sentences[0])
-#    rules = Rules(rules).tree_to_dict(t)
-#    rules = Rules().binarise(rules)
-#    Rules().percolate(rules)
-#
-#    # for sentence in a_sentences:
-#    #     t = Tree().parse_tree(None, sentence)
-#    #     tree_list.append(t)
-#    #
-#    # for tree in tree_list:
-#    #     rules = Rules(rules).tree_to_dict(tree)
-#    #
-#    # new_rules = Rules().binarise(rules)
-#
-#
-#    return rules
-#
-#all_rules = parse_sentences()
-#print("done!")
 
 
 
