@@ -1,19 +1,20 @@
 import copy
+from tqdm import tqdm
 sentences = "(TOP (S (yyQUOT yyQUOT) (S (VP (VB THIH)) (NP (NN NQMH)) (CC W) (ADVP (RB BGDWL))) (yyDOT yyDOT))),\
 (TOP (S (SBAR (S (S (NP (MOD GM) (NP (NN IHWDIM))) (VP (VB NMCAIM)) (ADVP (RB ETH)) (PP (IN EL) (NP (H H) (NN KWWNT)))) (yyQUOT yyQUOT))) (VP (VB AMRW)) (NP (NNT ANFI) (NP (NNP KK))) (PP (IN B) (NP (NNT ET) (NP (NNT MSE) (NP (H H) (NN HLWWIIH))))) (yyDOT yyDOT))),\
 (TOP (S (NP (NN AIF)) (ADVP (RB LA)) (VP (VB NISH)) (VP (VB LHSTIR) (NP (PRP ZAT))) (yyDOT yyDOT))),\
 (TOP (FRAG (NP (NP (MOD LA) (NP (NP (H H) (NN MNHIGIM)) (SBAR (REL F) (S (VP (VB HSITW)) (PP (IN L) (NP (NN RCX))))))) (CC (yySCLN yySCLN)) (NP (MOD LA) (NP (NP (NN XLQIM)) (PP (IN B) (NP (NP (H H) (NN CIBWR)) (ADJP (H H) (JJ ZH)))) (yyCM yyCM) (SBAR (REL F) (S (PP (IN LAWRK) (NP (NNT CIR) (NP (H H) (NN HLWWIIH)))) (VP (VB RQMW)) (NP (NP (NN TWKNIWT)) (SBAR (SQ (ADVP (QW KICD)) (VP (VB LPGWE) (PP (IN B) (NP (NN ERBIM)))) (PP (MOD KBR) (PP (IN B) (NP (NP (H H) (NN IMIM)) (ADJP (H H) (JJ QRWBIM))))))))))))) (yyDOT yyDOT))),\
 (TOP (S (NP (NP (NNT SWPR) (NP (yyQUOT yyQUOT) (NP (NNPP (H H) (NN ARC))) (yyQUOT yyQUOT))) (PP (IN B) (NP (H H) (NN CPWN)))) (yyCM yyCM) (VP (VB MWSIP)) (SBAR (yyCLN yyCLN) (S (NP (NN IRIWT)) (VP (VB NFMEW)) (ADVP (RB ATMWL)) (PP (IN B) (NP (NP (NN FEH)) (NP (CD 2000)) (PP (IN B) (NP (H H) (NN ERB))))) (PP (IN B) (NP (NNP FPREM))) (yyCM yyCM) (ADVP (ADVP (RB SMWK)) (PP (IN L) (NP (NP (NN BITW)) (POS FL) (NP (NP (NNT RAF) (NP (H H) (NN EIRIIH))) (yyCM yyCM) (NP (NNPP (NNP AIBRHIM) (NNPP (NNP NIMR) (NNP XWSIIN)))))))))) (yyDOT yyDOT))),\
 (TOP (S (NP (NN AIF)) (ADVP (RB LA)) (VP (VB NPGE)) (yyDOT yyDOT)))"
-from tqdm import tqdm
-import time
+
 a_sentences = sentences.split(",")
 
 class Node(object):
-    def __init__(self, tag, parent, is_terminal=False):
+    def __init__(self, tag, parent, span=None, is_terminal=False):
         self.tag = tag
         self.children = []
         self.parent = parent
+        self.span = span
         self.is_terminal = is_terminal
 
     def add_children(self,node):
@@ -80,26 +81,36 @@ class Tree(object):
 
         return node
 
+    def build_tree_from_cky_root_node(self, ckynode, parent=None):
 
-
-    def build_tree_from_ckyrootNode(self, ckynode, parent=None):
-
-        # one time - create root of tree
         if ckynode.left_child is None and ckynode.right_child is None:
             # Todo: could is_terminal be false here?
             return Node(tag=ckynode.tag, parent=parent, is_terminal=True)
 
-        parent = Node(ckynode.tag, parent=parent, is_terminal=False)
+        if parent is None and not (ckynode.tag == "S" or ckynode.tag == "TOP"):
+            top_parent = Node("TOP", parent=None, span=ckynode.span, is_terminal=False)
+            self.tree = top_parent
+            s_parent = Node("S", parent=top_parent, span=ckynode.span, is_terminal=False)
+            top_parent.add_children(s_parent)
+            parent = s_parent
 
-        if self.tree is None:
-            self.tree = parent
+            # one time - create root of tree
+            if self.tree is None:
+                self.tree = parent
+
+        # de-binarisation
+        if not ckynode.grammar_rule.rule.is_binarised:
+            parent = Node(ckynode.tag, parent=parent, span=ckynode.span, is_terminal=False)
 
         if ckynode.left_child is not None:
-            parent.add_children(self.build_tree_from_ckyrootNode(ckynode.left_child, parent))
+            parent.add_children(self.build_tree_from_cky_root_node(ckynode.left_child, parent))
         if ckynode.right_child is not None:
-            parent.add_children(self.build_tree_from_ckyrootNode(ckynode.right_child, parent))
+            parent.add_children(self.build_tree_from_cky_root_node(ckynode.right_child, parent))
 
         return parent
+
+
+
 
 class RuleNode(object):
     def __init__(self, tag, is_head=False, next=None, back=None, is_terminal=False):
@@ -120,9 +131,10 @@ class RuleNode(object):
         return chain
 
 class Rule(object):
-    def __init__(self, node, is_reconstructed=False):
+    def __init__(self, node, is_binarised=False, is_percolated=False):
         self.head = node
-        self.is_reconstructed = is_reconstructed
+        self.is_binarised = is_binarised
+        self.is_percolated = is_percolated
 
     def insert(self, node):
         temp = self.head
@@ -220,8 +232,7 @@ class Grammar(object):
         # s -> NP PROB: 0.3
         # NP -> vp nn PROB: 0.6
         # s-> vp nn 0.3*0.6
-        #[Rule,Rule,Rule...]
-        currentDT = time.time()
+        # [Rule,Rule,Rule...]
 
         stack = list()
 
@@ -253,6 +264,7 @@ class Grammar(object):
             new_rule = RuleNode(tag=tag, next=None, back=next)
             # s -> nn jj-kk
             next.next = new_rule
+            grammar_node.rule.is_binarised = True
 
             # grammar_node is fixed. Add the fixed rule to rules_dictionary and update heads_pointers
             new_dict = {grammar_node.rule.hash(): grammar_node}
@@ -263,7 +275,7 @@ class Grammar(object):
 
             # jj-kk -> jj kk
             rule_node = RuleNode(tag=tag, is_head=True, next=temp, back=None)
-            rule = Rule(rule_node, is_reconstructed=True)
+            rule = Rule(rule_node, is_binarised=True)
             new_grammar_rule = GrammarNode(rule, count=1, probability=1.0)
             # jj.back = jj-kk
             temp.back = rule.head
@@ -279,7 +291,7 @@ class Grammar(object):
                 self.heads_pointers[new_grammar_rule.rule.head.tag].add(new_grammar_rule.rule.hash())
 
         # stack is empty, all rules binarised.
-        print("Binarize finished in %s " % (time.time() - currentDT))
+        print("Binarise finished")
 
 
 
@@ -344,7 +356,7 @@ class Grammar(object):
                     # NN.back = S
                     next.back = new_rule_head
                     # S -> NN PP
-                    new_rule = Rule(new_rule_head, is_reconstructed=True)
+                    new_rule = Rule(new_rule_head, is_percolated=True)
 
                     if not new_rule.is_circular() and new_rule.hash() not in self.rules_dictionary:
                         # set new grammar rule

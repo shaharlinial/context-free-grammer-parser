@@ -101,8 +101,7 @@ def probabilistic_cky(words,grammar):
 
     tree_head = Tree()
     # phase 2: -> recursively build left and right children
-    tree_head.build_tree_from_ckyrootNode(root)
-    tree_head.print_tree(tree_head.tree)
+    tree_head.build_tree_from_cky_root_node(root)
     print("y")
 
     # TODO return BUILD TREE(back[1, LENGTH(words), S]), table[1, LENGTH(words), S]
