@@ -43,26 +43,31 @@ class Tree(object):
             print(treeNode.tag)
 
     def parse_tree(self, parent, bracket_sentence):
-        if parent is not None and parent.is_terminal == True:
+        if parent is not None and parent.is_terminal:
             return
-
-        if '(' not in bracket_sentence and ' 'not in bracket_sentence and ')' not in bracket_sentence:
-            return Node(tag=bracket_sentence,
-                        parent=parent,
-                        is_terminal=True)
 
         tag = self.parse_string_sequence(bracket_sentence[1:], " ")
         node = Node(tag=tag, parent=parent, is_terminal=False)
         if self.tree is None:
             self.tree = node
 
+        if parent is None:
+            start_span = 0
+        else:
+            if len(parent.children) == 0:
+                start_span = parent.span[0]
+            else:
+                start_span = parent.children[-1].span[1]
+
+        node.span = (start_span, start_span + 1)
+
         if bracket_sentence.count('(') == 1 and bracket_sentence.count(')') == 1:
-            n_node = Node(tag=self.parse_string_reverse_sequence(bracket_sentence[:-1], " "), parent = node, is_terminal = True)
+            n_node = Node(tag=self.parse_string_reverse_sequence(bracket_sentence[:-1], " "), parent=node, span=node.span, is_terminal=True)
             node.add_children(n_node)
             return node
 
         idx = 0
-        to_idx= 0
+        to_idx = 0
         counter = 0
         sentence = bracket_sentence[len(tag)+2:-1]
         for c in sentence:
@@ -79,6 +84,8 @@ class Tree(object):
                 node.add_children(self.parse_tree(node, sentence[idx:to_idx]))
                 idx = to_idx
 
+        node.span = (start_span, node.children[-1].span[1])
+
         return node
 
     def build_tree_from_cky_root_node(self, ckynode, parent=None):
@@ -94,13 +101,13 @@ class Tree(object):
             top_parent.add_children(s_parent)
             parent = s_parent
 
-            # one time - create root of tree
-            if self.tree is None:
-                self.tree = parent
-
         # de-binarisation
         if not ckynode.grammar_rule.rule.is_binarised:
             parent = Node(ckynode.tag, parent=parent, span=ckynode.span, is_terminal=False)
+
+        # one time - create root of tree
+        if self.tree is None:
+            self.tree = parent
 
         if ckynode.left_child is not None:
             parent.add_children(self.build_tree_from_cky_root_node(ckynode.left_child, parent))
@@ -224,7 +231,7 @@ class Grammar(object):
             grammar_rule.probability = grammar_rule.count / self.heads_count[grammar_rule.rule.head.tag]
 
     def binarise(self):
-        #{s -> nn jj kk } PROB: 0.5
+        # {s -> nn jj kk } PROB: 0.5
         # s->nn JJKK PROB:0.5
         # np-> nn jj kk PROB:0.4
         # np -> nn JJKK PROB: 0.4
@@ -385,8 +392,6 @@ class Grammar(object):
             i += 1
         # stack is empty, all rules percolated.
         print(" finished percolate")
-
-
 
 
 
