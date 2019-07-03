@@ -99,10 +99,13 @@ def probabilistic_cky(words,grammar):
     # phase 1: select max probability root ->
     root = get_max_probability(table[0][len(words) - 1])
 
-    tree_head = Tree()
+    tree = Tree()
     # phase 2: -> recursively build left and right children
-    tree_head.build_tree_from_cky_root_node(root)
-    print("y")
+    tree.build_tree_from_cky_root_node(root)
+
+    tree.de_binarise()
+
+    return tree
 
     # TODO return BUILD TREE(back[1, LENGTH(words), S]), table[1, LENGTH(words), S]
     print("------------------------- done!-----------------------")
@@ -110,25 +113,41 @@ def probabilistic_cky(words,grammar):
 from tqdm import tqdm
 g = Grammar()
 
+#tree = Tree().parse_tree(None, "(TOP (S (yyQUOT yyQUOT) (S (VP (VB THIH)) (NP (NN NQMH)) (CC W) (ADVP (RB BGDWL))) (yyDOT yyDOT)))")
 #g.build_grammar_from_tree(Tree().parse_tree(None, "(TOP (S (yyQUOT yyQUOT) (S (VP (VB THIH)) (NP (NN NQMH)) (CC W) (ADVP (RB BGDWL))) (yyDOT yyDOT)))"))
-with open('data/heb-ctrees_small.train', 'r') as train_set:
+#print("done")
+with open('data/heb-ctrees.train', 'r') as train_set:
     for sentence in tqdm(train_set.readlines()):
         g.build_grammar_from_tree(Tree().parse_tree(None, sentence))
 
 
 g.calculate_probabilities()
+#(TOP (S (NP (NN AIF)) (ADVP (RB LA)) (VP (VB NPGE)) (yyDOT yyDOT)))
 g.binarise()
 g.percolate()
 new_sentence = "AIF LA NPGE yyDOT".split(" ")
-#(TOP (S (NP (NN AIF)) (ADVP (RB LA)) (VP (VB NPGE)) (yyDOT yyDOT)))
 new_sentence1 = "XBL yyDOT".split(" ")
 #(TOP (FRAG (INTJ (ADVP (RB XBL))) (yyDOT yyDOT)))
 new_sentence2 = "MSTBR F HIITI TMIM yyDOT".split(" ")
 #(TOP (S (VP (VB MSTBR)) (SBAR (COM F) (S (AUX HIITI) (PREDP (ADJP (JJ TMIM))))) (yyDOT yyDOT)))
 
-#probabilistic_cky(new_sentence, g)
+hypothesis_tree = probabilistic_cky(new_sentence, g)
+
+ground_truth_tree = Tree()
+ground_truth_tree.parse_tree(None, bracket_sentence="(TOP (S (NP (NN AIF)) (ADVP (RB LA)) (VP (VB NPGE)) (yyDOT yyDOT)))")
+
+h_span_set = hypothesis_tree.get_tree_span()
+print("h_span_set " + str(len(h_span_set)))
+g_span_set = ground_truth_tree.get_tree_span()
+print("g_span_set " + str(len(g_span_set)))
+intersection = g_span_set.intersection(h_span_set)
+print("intersection "+str(len(intersection)))
+recall = len(intersection)/len(g_span_set)
+precision = len(intersection)/len(h_span_set)
+f_score = (2*precision*recall)/(precision + recall)
+print("f_score "+str(f_score))
 #probabilistic_cky(new_sentence1, g)
-probabilistic_cky(new_sentence2, g)
+#probabilistic_cky(new_sentence2, g)
 
 
 
