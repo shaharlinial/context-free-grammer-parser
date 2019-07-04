@@ -34,8 +34,6 @@ def probabilistic_cky(words,grammar):
     # grammar -> Grammar()
     table = [[{} for x in range(len(words))] for y in range(len(words))]
     # table = ROW X COLUMNS table[i][j] -> table[i][j] = {S|VP|...|:CkyNode}
-    back = [[{} for x in range(len(words))] for y in range(len(words))]
-    # back = later....
     # rules_dictionary = {hash:grammar node} , {"S->VP NN":GrammarNode()}
     rules_dictionary = grammar.rules_dictionary
     # iterate words
@@ -79,7 +77,7 @@ def probabilistic_cky(words,grammar):
                     left_tag = left_node.tag
                     for right_node in table[k][j].values():
                         right_tag = right_node.tag
-                        for head, rule_set in grammar.heads_pointers.items():
+                        for head in grammar.heads_pointers:
                             key = head+"->"+left_tag+" "+right_tag
                             if key in rules_dictionary:
                                 grammar_rule = rules_dictionary[key]
@@ -88,12 +86,10 @@ def probabilistic_cky(words,grammar):
                                     head_cky_node = table[i][j][head]
                                     p1 = head_cky_node.probability
                                     if p1 < p2:
-                                        table[i][j][head] = CkyNode(head_cky_node.tag, grammar_rule, p2, (i, j+1), left_node, right_node)
-                                        back[i][j] = {head: [k, left_node, right_node]}
+                                        table[i][j][head] = CkyNode(head, grammar_rule, p2, (i, j+1), left_node, right_node)
                                 else:
                                     # put new rule in table[i][j]
                                     table[i][j][head] = CkyNode(head, grammar_rule, p2, (i, j+1), left_node, right_node)
-                                    back[i][j] = {head: [k, left_node, right_node]}
 
     # Building tree.
     # phase 1: select max probability root ->

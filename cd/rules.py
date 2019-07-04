@@ -10,12 +10,13 @@ sentences = "(TOP (S (yyQUOT yyQUOT) (S (VP (VB THIH)) (NP (NN NQMH)) (CC W) (AD
 a_sentences = sentences.split(",")
 
 class Node(object):
-    def __init__(self, tag, parent, span=None, is_terminal=False):
+    def __init__(self, tag, parent, span=None, is_terminal=False, is_binarised=False):
         self.tag = tag
         self.children = []
         self.parent = parent
         self.span = span
         self.is_terminal = is_terminal
+        self.is_binarised = is_binarised
 
     def add_children(self,node):
         self.children.append(node)
@@ -94,17 +95,18 @@ class Tree(object):
             # Todo: could is_terminal be false here?
             return Node(tag=ckynode.tag, parent=parent, is_terminal=True)
 
-        if parent is None and not (ckynode.tag == "S" or ckynode.tag == "TOP"):
-            top_parent = Node("TOP", parent=None, span=ckynode.span, is_terminal=False)
-            self.tree = top_parent
-            s_parent = Node("S", parent=top_parent, span=ckynode.span, is_terminal=False)
-            top_parent.add_children(s_parent)
-            parent = s_parent
+        # if parent is None and not ckynode.tag == "TOP":
+        #     top_parent = Node(tag="TOP", parent=None, span=ckynode.span)
+        #     self.tree = top_parent
+        #     s_parent = Node(tag="S", parent=top_parent, span=ckynode.span)
+        #     parent = s_parent
+        #     top_parent.add_children(parent)
 
-        # de-binarisation
-        if not ckynode.grammar_rule.rule.is_binarised:
-            parent = Node(ckynode.tag, parent=parent, span=ckynode.span, is_terminal=False)
-
+        # if not ckynode.grammar_rule.rule.is_binarised:
+        #     parent = Node(ckynode.tag, parent=parent, span=ckynode.span, is_terminal=False)
+        # else:
+        #     print(ckynode.tag + " is binarised")
+        parent = Node(ckynode.tag, parent=parent, span=ckynode.span, is_terminal=False, is_binarised=ckynode.grammar_rule.rule.is_binarised)
         # one time - create root of tree
         if self.tree is None:
             self.tree = parent
@@ -115,6 +117,47 @@ class Tree(object):
             parent.add_children(self.build_tree_from_cky_root_node(ckynode.right_child, parent))
 
         return parent
+
+    def de_binarise(self, node=None):
+        if node is None and self.tree.tag is not "TOP":
+            t_node = Node("TOP", None, self.tree.span, False, False)
+            s_node = Node("S", t_node, self.tree.span, False, False)
+            t_node.add_children(s_node)
+            s_node.add_children(self.tree)
+            self.tree.parent = s_node
+            self.tree = t_node
+
+        if node is None:
+            node = self.tree
+
+        if node.children is not None:
+            children = node.children
+
+        if node.is_binarised:
+            new_parent = node.parent
+            if children is not None:
+                for child in children:
+                    child.parent = new_parent
+                new_parent.children.remove(node)
+                new_parent.children.extend(children)
+
+        if children is not None:
+            for child in children:
+                self.de_binarise(child)
+
+
+    def get_tree_span(self, node=None, span_set=None):
+        if span_set is None:
+            span_set = set()
+        if node is None:
+            node = self.tree
+        if not node.is_terminal:
+            span_set.add((node.span[0], node.tag, node.span[1]))
+            if node.children is not None:
+                for child in node.children:
+                    self.get_tree_span(child, span_set)
+        return span_set
+
 
 
 
