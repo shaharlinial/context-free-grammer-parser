@@ -34,14 +34,15 @@ class Tree(object):
         return string[string.index(special_key) + 1:]
 
     def print_tree(self, treeNode):
+        children_tree = ""
         if len(treeNode.children) != 0:
-            print("(")
-            print(treeNode.tag)
             for child in treeNode.children:
-                self.print_tree(child)
-            print(")")
+                children_tree += self.print_tree(child)
+
+        if len(children_tree) > 0:
+            return "("+treeNode.tag+" "+children_tree+") "
         else:
-            print(treeNode.tag)
+            return treeNode.tag
 
     def parse_tree(self, parent, bracket_sentence):
         if parent is not None and parent.is_terminal:
@@ -158,10 +159,6 @@ class Tree(object):
                     self.get_tree_span(child, span_set)
         return span_set
 
-
-
-
-
 class RuleNode(object):
     def __init__(self, tag, is_head=False, next=None, back=None, is_terminal=False):
         self.tag = tag
@@ -170,7 +167,7 @@ class RuleNode(object):
         self.next = next
         self.back = back
 
-    #returns the current tag chained by following tags "s->nn->jj" ==> "s-nn-jj"
+    #returns the current tag chained by following tags "s->nn->jj"
     def chain_tags(self):
         chain = self.tag
         temp = self
@@ -179,6 +176,16 @@ class RuleNode(object):
             chain += ('-' + temp.next.tag)
             temp = temp.next
         return chain
+
+    def improved_chain_tags(self):
+        chain = self.tag
+        temp = self
+
+        while temp.next is not None:
+            chain += ('|' + temp.next.tag)
+            temp = temp.next
+        return chain
+
 
 class Rule(object):
     def __init__(self, node, is_binarised=False, is_percolated=False):
@@ -237,7 +244,7 @@ class Grammar(object):
         self.heads_pointers = dict() # "{s:set("s->vp nn","s->yyqout yyquot"...)}"
         self.tails_pointers = dict() # "{jj-kk-mm: set("x->y jj-kk-mm..")}
         self.rules_dictionary = dict()  # 'hash(rule):grammar_node'
-
+        self.UNKNOWN_PROBABILITY_CONST = 0.0
 
     def build_grammar_from_tree(self, tree_head):
         #process tree... -> self.rule_list = TREE_PROCCESSED
@@ -343,9 +350,6 @@ class Grammar(object):
         # stack is empty, all rules binarised.
         print("Binarise finished")
 
-
-
-
     def percolate(self):
 
         stack = list()
@@ -436,7 +440,12 @@ class Grammar(object):
         # stack is empty, all rules percolated.
         print(" finished percolate")
 
-
+    def populate_tails(self):
+        for rule_hash, grammar_node in tqdm(self.rules_dictionary.items(), "populating tails..."):
+            key = grammar_node.rule.head.next.improved_chain_tags()
+            if key not in self.tails_pointers:
+                self.tails_pointers[key] = set()
+            self.tails_pointers[key].add(rule_hash)
 
     #def build_tails(self):
     # root : SBAR-yyDOT ==> TOP => NP SBAR YYDOT
