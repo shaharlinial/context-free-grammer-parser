@@ -9,6 +9,7 @@ sentences = "(TOP (S (yyQUOT yyQUOT) (S (VP (VB THIH)) (NP (NN NQMH)) (CC W) (AD
 
 a_sentences = sentences.split(",")
 
+
 class Node(object):
     def __init__(self, tag, parent, span=None, is_terminal=False, is_binarised=False):
         self.tag = tag
@@ -20,6 +21,21 @@ class Node(object):
 
     def add_children(self,node):
         self.children.append(node)
+
+
+class AnnotatedNode(object):
+    def __init__(self, tag, parent, annotated_tag, span=None, is_terminal=False, is_binarised=False):
+        self.tag = tag
+        self.children = []
+        self.parent = parent
+        self.annotated_tag = annotated_tag
+        self.span = span
+        self.is_terminal = is_terminal
+        self.is_binarised = is_binarised
+
+    def add_children(self, node):
+        self.children.append(node)
+
 
 class Tree(object):
     def __init__(self, head=None):
@@ -90,6 +106,60 @@ class Tree(object):
 
         return node
 
+    def parse_tree_with_parent_annotation(self, parent, bracket_sentence):
+
+        if parent is not None and parent.is_terminal:
+            return
+
+        tag = self.parse_string_sequence(bracket_sentence[1:], " ")
+        node = AnnotatedNode(tag=tag, parent=parent, annotated_tag=parent.tag+"^"+tag, is_terminal=False)
+        if self.tree is None:
+            self.tree = node
+
+        if parent is None:
+            start_span = 0
+        else:
+            if len(parent.children) == 0:
+                start_span = parent.span[0]
+            else:
+                start_span = parent.children[-1].span[1]
+
+        node.span = (start_span, start_span + 1)
+
+        if bracket_sentence.count('(') == 1 and bracket_sentence.count(')') == 1:
+            tag = self.parse_string_reverse_sequence(bracket_sentence[:-1], " ")
+            n_node = AnnotatedNode(tag=tag, parent=node, annotated_tag=node.tag+"^"+tag, span=node.span, is_terminal=True)
+            node.add_children(n_node)
+            return node
+
+        idx = 0
+        to_idx = 0
+        counter = 0
+        sentence = bracket_sentence[len(tag)+2:-1]
+        for c in sentence:
+            to_idx += 1
+            if c == "(":
+                counter += 1
+            if c == ")":
+                counter -= 1
+            if counter == 0:
+                # parse next children [space after rounded brackets] #
+                if c == ' ':
+                    idx += 1
+                    continue
+                node.add_children(self.parse_tree(node, sentence[idx:to_idx]))
+                idx = to_idx
+
+        node.span = (start_span, node.children[-1].span[1])
+
+        return node
+
+    # TODO: build grammar from annotated parent tree. For example:
+    # NP ^ S → Det ^ NP Noun ^ NP
+    # NP ^ S → Pro ^ NP
+    # NP ^ VP → Det ^ NP Noun ^ NP
+    # NP ^ S → Pro ^ NP
+
     def build_tree_from_cky_root_node(self, ckynode, parent=None):
 
         if ckynode.left_child is None and ckynode.right_child is None:
@@ -120,6 +190,7 @@ class Tree(object):
         return parent
 
     def de_binarise(self, node=None):
+        # TODO: check before automatically adding TOP-S-
         if node is None and self.tree.tag is not "TOP":
             t_node = Node("TOP", None, self.tree.span, False, False)
             s_node = Node("S", t_node, self.tree.span, False, False)
