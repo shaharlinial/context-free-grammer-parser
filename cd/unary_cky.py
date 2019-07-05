@@ -1,5 +1,6 @@
 from cd.rules import Grammar, Tree
 from cd.cky import CkyNode, get_max_probability
+import math
 
 
 def probabilistic_unary_cky(words, grammar):
@@ -13,33 +14,28 @@ def probabilistic_unary_cky(words, grammar):
         # iterate rule
         # for grammar_rule in rules_dictionary.values():
         # fill rule->words
-        for head in grammar.heads_pointers:
-            # Search for rules of this form: X -> word [terminal]
-            # rule_node = y <-> X->y
-            search_rule = head + "->" + word
-            if search_rule in rules_dictionary:
-                grammar_rule = rules_dictionary[search_rule]
-                # grammar_rule = X->word
-                # rule_key = X
-                rule_key = grammar_rule.rule.head.tag
-                # "X: X->word"
-                to_word = CkyNode(tag=grammar_rule.rule.head.next.tag,
-                                  grammar_rule=None,
-                                  probability=0.0,
-                                  span=None,
-                                  left_child=None,
-                                  right_child=None)
-
-                cky_node = CkyNode(tag=grammar_rule.rule.head.tag,
-                                   grammar_rule=grammar_rule,
-                                   probability=grammar_rule.probability,
-                                   span=(j, j + 1),
-                                   left_child=to_word,
-                                   right_child=None)
-
-                new_dict = {rule_key: cky_node}
-                # table[j][j] = {"s":CkyNode} --> table[j][j] = {"s":CkyNode, "np":CkyNode}
-                table[j][j].update(new_dict)
+        rules = grammar.tails_pointers[word]
+        for r in rules:
+            grammar_rule = rules_dictionary[r]
+            # grammar_rule = X->word
+            # rule_key = X
+            rule_key = grammar_rule.rule.head.tag
+            # "X: X->word"
+            to_word = CkyNode(tag=grammar_rule.rule.head.next.tag,
+                              grammar_rule=None,
+                              probability=0.0,
+                              span=None,
+                              left_child=None,
+                              right_child=None)
+            cky_node = CkyNode(tag=grammar_rule.rule.head.tag,
+                               grammar_rule=grammar_rule,
+                               probability=math.log2(grammar_rule.probability),
+                               span=(j, j + 1),
+                               left_child=to_word,
+                               right_child=None)
+            new_dict = {rule_key: cky_node}
+            # table[j][j] = {"s":CkyNode} --> table[j][j] = {"s":CkyNode, "np":CkyNode}
+            table[j][j].update(new_dict)
 
         # second part of algorithm // fill rules->rules
         for i in range(j - 1, -1, -1):
@@ -49,21 +45,23 @@ def probabilistic_unary_cky(words, grammar):
                     left_tag = left_node.tag
                     for right_node in table[k][j].values():
                         right_tag = right_node.tag
-                        for head in grammar.heads_pointers:
-                            binary_key = head + "->" + left_tag + " " + right_tag
-                            if binary_key in rules_dictionary:
-                                grammar_rule = rules_dictionary[binary_key]
-                                p2 = grammar_rule.probability * left_node.probability * right_node.probability
-                                if head in table[i][j]:
-                                    head_cky_node = table[i][j][head]
-                                    p1 = head_cky_node.probability
-                                    if p1 < p2:
-                                        table[i][j][head] = CkyNode(head, grammar_rule, p2, (i, j + 1),
-                                                                    left_node, right_node)
-                                else:
-                                    # put new rule in table[i][j]
+                        key = left_tag + "|" + right_tag
+                        rules = []
+                        if key in grammar.tails_pointers:
+                            rules = grammar.tails_pointers[key]  # o(1)
+                        for r in rules:
+                            grammar_rule = rules_dictionary[r]
+                            p2 = math.log2(grammar_rule.probability) + left_node.probability + right_node.probability
+                            head = grammar_rule.rule.head.tag
+                            if head in table[i][j]:
+                                head_cky_node = table[i][j][head]
+                                p1 = head_cky_node.probability
+                                if p1 < p2:
                                     table[i][j][head] = CkyNode(head, grammar_rule, p2, (i, j + 1), left_node,
                                                                 right_node)
+                            else:
+                                # put new rule in table[i][j]
+                                table[i][j][head] = CkyNode(head, grammar_rule, p2, (i, j + 1), left_node, right_node)
 
             # process unary rules - look for A->B (cky_node) in table[i][j] rules. add A to table[i][j] with pointer to B
 
@@ -72,23 +70,22 @@ def probabilistic_unary_cky(words, grammar):
                 stack.append(cky_node)
             while len(stack) > 0:
                 cky_node = stack.pop()
-                heads_pointers = [head for head in grammar.heads_pointers if not head == cky_node.tag]
-                for head in heads_pointers:
-                    unary_rule = head + "->" + cky_node.tag
-                    if unary_rule in rules_dictionary:
-                        grammar_rule = rules_dictionary[unary_rule]
-                        p2 = grammar_rule.probability * cky_node.probability
-                        if head in table[i][j]:
-                            head_cky_node = table[i][j][head]
-                            p1 = head_cky_node.probability
-                            if p1 < p2:
-                                new_cky_node = CkyNode(head, grammar_rule, p2, cky_node.span, cky_node)
-                                table[i][j][head] = new_cky_node
-                                stack.append(new_cky_node)
-                        else:
+                rules = grammar.tails_pointers[cky_node.tag]
+                for r in rules:
+                    grammar_rule = rules_dictionary[r]
+                    p2 = math.log2(grammar_rule.probability) + cky_node.probability
+                    head = grammar_rule.rule.head.tag
+                    if head in table[i][j]:
+                        head_cky_node = table[i][j][head]
+                        p1 = head_cky_node.probability
+                        if p1 < p2:
                             new_cky_node = CkyNode(head, grammar_rule, p2, cky_node.span, cky_node)
                             table[i][j][head] = new_cky_node
                             stack.append(new_cky_node)
+                    else:
+                        new_cky_node = CkyNode(head, grammar_rule, p2, cky_node.span, cky_node)
+                        table[i][j][head] = new_cky_node
+                        stack.append(new_cky_node)
 
     # Building tree.
     # phase 1: select max probability root ->
