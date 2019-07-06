@@ -1,4 +1,4 @@
-from mmn13.cd.rules import Grammar, Tree, Node
+from mmn13.cd.rules import Grammar, Tree, Node, Rule, RuleNode, GrammarNode
 import math
 import time
 #from cd.rules import Grammar, Tree
@@ -16,7 +16,7 @@ class CkyNode(object):
         self.span = span
 
 def get_max_probability(dictionary):
-    max = 0.0
+    max = float("-inf")
     ckynode = None
     for key,value in dictionary.items():
         if max <= value.probability:
@@ -37,39 +37,68 @@ def probabilistic_cky(words,grammar):
         #for grammar_rule in rules_dictionary.values():
 
         # fill rule->words
-        rules = grammar.tails_pointers[word]
+        try:
+            rules = grammar.tails_pointers[word]
+            for r in rules:
+                grammar_rule = rules_dictionary[r]
+                # grammar_rule = X->word
+                # rule_key = X
+                rule_key = grammar_rule.rule.head.tag
+                # "X: X->word"
+                to_word = CkyNode(tag=grammar_rule.rule.head.next.tag,
+                                  grammar_rule=None,
+                                  probability=0.0,
+                                  span=None,
+                                  left_child=None,
+                                  right_child=None)
+                cky_node = CkyNode(tag=grammar_rule.rule.head.tag,
+                                   grammar_rule=grammar_rule,
+                                   probability=math.log2(grammar_rule.probability),
+                                   span=(j, j + 1),
+                                   left_child=to_word,
+                                   right_child=None)
+                new_dict = {rule_key: cky_node}
+                # table[j][j] = {"s":CkyNode} --> table[j][j] = {"s":CkyNode, "np":CkyNode}
+                table[j][j].update(new_dict)
+            print("Finished [%d][%d] in %s seconds" % (j, j, str(time.time() - t1)))
+        except KeyError:
 
-        # We thought that it would have been a great idea, smoothing unknown words
-        # using features like we did in MMN 12 and HMM decoding,
-        # But since words are transliterated from english to hebrew,
-        # it seem a bit pointless to write a probability matrix for a NON-Terminal -> Terminal rule
-        # without knowing any structural information about the words.
-        # Eventually we went with Laplace smoothing "NFRM" | VP->NFRM , S->NFRM ... with probability of 1/|Grammar|
+            # We thought that it would have been a great idea, smoothing unknown words
+            # using features like we did in MMN 12 and HMM decoding,
+            # But since words are transliterated from english to hebrew,
+            # it seem a bit pointless to write a probability matrix for a NON-Terminal -> Terminal rule
+            # without knowing any structural information about the words.
+            # Eventually we went with Laplace smoothing "NFRM" | VP->NFRM , S->NFRM ... with probability of 1/|Grammar|
+
+            # Example: given word "NFRM" which there are no rules that generate this word.
+            # Vocabulary = All Word is Grammar [TOP->"alo", X->"alo"]  equals to 1 <-> iterate 1 time tails
+            # pointer
+            # add +1 for each tail that doesnt contain '|'
+            # so V = |Vocabulary|
+            # count each POS Rule and save as q_i
+            # if unknown words -> probability for each tag i is 1 / V+q_i
+            # if known word -> probability is count(POS Rule) + 1 / V+q_i
+            # Note: must be done prior to binarise and percolate
+            for rule_key, unknown_grammar_node in grammar.unknown_words.items():
+                rule_key = unknown_grammar_node.rule.head.tag
+                # "X: X->#"
+                to_word = CkyNode(tag=word,
+                                  grammar_rule=None,
+                                  probability=0.0,
+                                  span=None,
+                                  left_child=None,
+                                  right_child=None)
+                cky_node = CkyNode(tag=unknown_grammar_node.rule.head.tag,
+                                   grammar_rule=unknown_grammar_node,
+                                   probability=math.log2(unknown_grammar_node.probability),
+                                   span=(j, j + 1),
+                                   left_child=to_word,
+                                   right_child=None)
+                new_dict = {rule_key: cky_node}
+                # table[j][j] = {"s":CkyNode} --> table[j][j] = {"s":CkyNode, "np":CkyNode}
+                table[j][j].update(new_dict)
 
 
-        # TODO: if word doesnt exist in training set , will raise KeyError exception. -> need to be solved with smoothing.
-        for r in rules:
-            grammar_rule = rules_dictionary[r]
-            # grammar_rule = X->word
-            # rule_key = X
-            rule_key = grammar_rule.rule.head.tag
-            # "X: X->word"
-            to_word = CkyNode(tag=grammar_rule.rule.head.next.tag,
-                              grammar_rule=None,
-                              probability=0.0,
-                              span=None,
-                              left_child=None,
-                              right_child=None)
-            cky_node = CkyNode(tag=grammar_rule.rule.head.tag,
-                               grammar_rule=grammar_rule,
-                               probability=math.log2(grammar_rule.probability),
-                               span=(j, j+1),
-                               left_child=to_word,
-                               right_child=None)
-            new_dict = {rule_key: cky_node}
-            #table[j][j] = {"s":CkyNode} --> table[j][j] = {"s":CkyNode, "np":CkyNode}
-            table[j][j].update(new_dict)
-        print("Finished [%d][%d] in %s seconds" % (j,j, str(time.time() - t1)))
         # second part of algorithm // fill rules->rules
         for i in range(j-1, -1, -1):
             for k in range(i+1, j+1, 1):
@@ -118,6 +147,7 @@ with open('data/heb-ctrees.train', 'r') as train_set:
 
 
 g.calculate_probabilities()
+g.gen_unknown_word_probability()
 #(TOP (S (NP (NN AIF)) (ADVP (RB LA)) (VP (VB NPGE)) (yyDOT yyDOT)))
 # l=1  l=2 l=3 l=4       l = 3  l=4    l=3 l=4          l=3 l=4
 g.binarise()
@@ -150,8 +180,8 @@ ground_truth_tree.parse_tree(None, bracket_sentence="(TOP (S (NP (NN AIF)) (ADVP
 #f_score = (2*precision*recall)/(precision + recall)
 #print("f_score "+str(f_score))
 #probabilistic_cky(new_sentence1, g)
-t = probabilistic_cky(new_sentence3, g)
-print(t.print_tree(t.tree.head))
+t = probabilistic_cky(new_sentence2, g)
+print(t.print_tree(t.tree))
 #f_out = open("data/test.tst", "a+")
 #with open('data/gold_small_sentences', 'r') as gold_sentences:
 #    for sentence in tqdm(gold_sentences.readlines(), "parsing gold sentences"):

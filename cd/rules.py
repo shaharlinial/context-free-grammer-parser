@@ -1,4 +1,6 @@
 import copy
+import time
+import json
 from tqdm import tqdm
 sentences = "(TOP (S (yyQUOT yyQUOT) (S (VP (VB THIH)) (NP (NN NQMH)) (CC W) (ADVP (RB BGDWL))) (yyDOT yyDOT))),\
 (TOP (S (SBAR (S (S (NP (MOD GM) (NP (NN IHWDIM))) (VP (VB NMCAIM)) (ADVP (RB ETH)) (PP (IN EL) (NP (H H) (NN KWWNT)))) (yyQUOT yyQUOT))) (VP (VB AMRW)) (NP (NNT ANFI) (NP (NNP KK))) (PP (IN B) (NP (NNT ET) (NP (NNT MSE) (NP (H H) (NN HLWWIIH))))) (yyDOT yyDOT))),\
@@ -315,7 +317,7 @@ class Grammar(object):
         self.heads_pointers = dict() # "{s:set("s->vp nn","s->yyqout yyquot"...)}"
         self.tails_pointers = dict() # "{jj-kk-mm: set("x->y jj-kk-mm..")}
         self.rules_dictionary = dict()  # 'hash(rule):grammar_node'
-        self.UNKNOWN_PROBABILITY_CONST = 0.0
+        self.unknown_words = dict()
 
     def build_grammar_from_tree(self, tree_head):
         #process tree... -> self.rule_list = TREE_PROCCESSED
@@ -347,9 +349,36 @@ class Grammar(object):
         for child in node.children:
             self.build_grammar_from_tree(child)
 
+
+
     def calculate_probabilities(self):
         for key, grammar_rule in self.rules_dictionary.items():
             grammar_rule.probability = grammar_rule.count / self.heads_count[grammar_rule.rule.head.tag]
+
+
+    def gen_unknown_word_probability(self):
+        self.populate_tails()
+        self.pos_probability = dict()
+
+        tot = 0.0
+        pos = dict()
+
+        for rule in self.rules_dictionary:
+            if len(rule.rule) == 2 and rule.rule.head.next.is_terminal:
+                tot += 1.0
+                if rule.rule.head.tag not in pos:
+                    pos[rule.rule.head.tag] = 1.0
+                else:
+                    pos[rule.rule.head.tag] += 1.0
+
+        for pos_tag, count in pos.items():
+            pos_probability  = count / tot
+            unknown_word = RuleNode(tag='#', is_head=False, is_terminal=True, next=None)
+            temp_rule = RuleNode(tag=pos_tag, is_head=True, is_terminal=False, back=None, next=unknown_word)
+            unknown_word.back = temp_rule
+            new_temp_rule = Rule(node=temp_rule, is_binarised=False,is_percolated=False)
+            new_grammar_node = GrammarNode(rule=new_temp_rule, probability=pos_probability, count=count)
+            self.unknown_words[new_temp_rule.hash()] = new_grammar_node
 
     def binarise(self):
         # {s -> nn jj kk } PROB: 0.5
@@ -422,7 +451,7 @@ class Grammar(object):
         print("Binarise finished")
 
     def percolate(self):
-
+        t1 = time.time()
         stack = list()
         for grammar_node in self.rules_dictionary.values():
             # S -> VP
@@ -432,10 +461,10 @@ class Grammar(object):
                 stack.append(grammar_node)
         i = 0
         while len(stack) > 0:
-            print(str(i) + " : stack size " + str(len(stack)))
+
             #grammar_node = S->VP
             grammar_node = stack.pop()
-            print(" old rule " + grammar_node.rule.hash())
+
             # remove S -> VP
             # ADD S -> populated(VP)
             # search all VP -> XX YY
@@ -454,7 +483,6 @@ class Grammar(object):
             # all_hash_rules_for_percolated_key = ["VP->NN PP"]
             all_hash_rules_for_percolated_key = self.heads_pointers[percolated_key]
 
-            print(" num of replace rules " + str(len(all_hash_rules_for_percolated_key)))
             rules_to_percolate = list()
             for hash_rule in all_hash_rules_for_percolated_key:
                 # (i=1) Brings VP->NN PP
@@ -502,16 +530,16 @@ class Grammar(object):
                 if key in rule_set:
                     rule_set.remove(key)
             if len(rules_to_percolate) > 0:
-                print(" num of replacement rules to percolate "+str(len(rules_to_percolate)))
                 # If rules to percolate not empty push grammar_rule back and push rules_to_percolate on top
                 stack.append(grammar_node)
                 stack.extend(rules_to_percolate)
                 rules_to_percolate.clear()
             i += 1
         # stack is empty, all rules percolated.
-        print(" finished percolate")
+        print("Finished percolate in %s" % str(time.time() - t1))
 
     def populate_tails(self):
+        self.tails_pointers = dict()
         for rule_hash, grammar_node in tqdm(self.rules_dictionary.items(), "populating tails..."):
             key = grammar_node.rule.head.next.improved_chain_tags()
             if key not in self.tails_pointers:
