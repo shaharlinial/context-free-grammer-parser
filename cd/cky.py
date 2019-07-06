@@ -97,6 +97,7 @@ def probabilistic_cky(words,grammar):
                 new_dict = {rule_key: cky_node}
                 # table[j][j] = {"s":CkyNode} --> table[j][j] = {"s":CkyNode, "np":CkyNode}
                 table[j][j].update(new_dict)
+            print("Finished [%d][%d] in %s seconds" % (j, j, str(time.time() - t1)))
 
 
         # second part of algorithm // fill rules->rules
@@ -161,13 +162,13 @@ new_sentence1 = "XBL yyDOT".split(" ")
 new_sentence2 = "MSTBR F HIITI TMIM yyDOT".split(" ")
 #(TOP (S (VP (VB MSTBR)) (SBAR (COM F) (S (AUX HIITI) (PREDP (ADJP (JJ TMIM))))) (yyDOT yyDOT)))
 new_sentence3 = "SEIP MPTX B H MSMK H XWQTI MXIIB AT H MLK yyQUOT LCIIT L H XWQH W LHGN ELI HIA yyQUOT yyDOT".split(" ")
-
+new_sentence4 = "EFRWT ANFIM MGIEIM M TAILND L IFRAL KF HM NRFMIM K MTNDBIM yyCM AK LMEFH MFMFIM EWBDIM FKIRIM ZWLIM yyDOT".split(" ")
 
 ##hypothesis_tree = probabilistic_cky(new_sentence, g)
 
-ground_truth_tree = Tree()
+#ground_truth_tree = Tree()
 #ground_truth_tree.parse_tree(None, bracket_sentence="(TOP (S (NP (NN AIF)) (ADVP (RB LA)) (VP (VB NPGE)) (yyDOT yyDOT)))")
-ground_truth_tree.parse_tree(None, bracket_sentence="(TOP (S (NP (NN AIF)) (ADVP (RB LA)) (VP (VB NPGE)) (yyDOT yyDOT)))")
+#ground_truth_tree.parse_tree(None, bracket_sentence="(TOP (S (NP (NN AIF)) (ADVP (RB LA)) (VP (VB NPGE)) (yyDOT yyDOT)))")
 
 #h_span_set = hypothesis_tree.get_tree_span()#
 #print("h_span_set " + str(len(h_span_set)))
@@ -180,15 +181,15 @@ ground_truth_tree.parse_tree(None, bracket_sentence="(TOP (S (NP (NN AIF)) (ADVP
 #f_score = (2*precision*recall)/(precision + recall)
 #print("f_score "+str(f_score))
 #probabilistic_cky(new_sentence1, g)
-t = probabilistic_cky(new_sentence2, g)
+t = probabilistic_cky(new_sentence4, g)
 print(t.print_tree(t.tree))
-#f_out = open("data/test.tst", "a+")
-#with open('data/gold_small_sentences', 'r') as gold_sentences:
-#    for sentence in tqdm(gold_sentences.readlines(), "parsing gold sentences"):
-#        hypothesis_tree = probabilistic_cky(sentence.split(" "), g)
-#        f_out.write(hypothesis_tree.print_tree(hypothesis_tree.tree) + "\n")
-#
-#f_out.close()
+f_out = open("data/test.tst", "a+")
+with open('data/gold_small_sentences', 'r') as gold_sentences:
+    for sentence in tqdm(gold_sentences.readlines(), "parsing gold sentences"):
+        hypothesis_tree = probabilistic_cky(sentence.split(" "), g)
+        f_out.write(hypothesis_tree.print_tree(hypothesis_tree.tree))
+
+f_out.close()
 #
 #
 #

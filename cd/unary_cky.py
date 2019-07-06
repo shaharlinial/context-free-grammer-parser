@@ -1,41 +1,81 @@
-from cd.rules import Grammar, Tree
-from cd.cky import CkyNode, get_max_probability
+from mmn13.cd.rules import Grammar, Tree
+from mmn13.cd.cky import CkyNode, get_max_probability
+import time
 import math
 
 
 def probabilistic_unary_cky(words, grammar):
     # grammar -> Grammar()
+    t1 = time.time()
+
     table = [[{} for x in range(len(words))] for y in range(len(words))]
     # table = ROW X COLUMNS table[i][j] -> table[i][j] = {S|VP|...|:CkyNode}
     # rules_dictionary = {hash:grammar node} , {"S->VP NN":GrammarNode()}
     rules_dictionary = grammar.rules_dictionary
     # iterate words
     for j, word in enumerate(words):
-        # iterate rule
-        # for grammar_rule in rules_dictionary.values():
         # fill rule->words
-        rules = grammar.tails_pointers[word]
-        for r in rules:
-            grammar_rule = rules_dictionary[r]
-            # grammar_rule = X->word
-            # rule_key = X
-            rule_key = grammar_rule.rule.head.tag
-            # "X: X->word"
-            to_word = CkyNode(tag=grammar_rule.rule.head.next.tag,
-                              grammar_rule=None,
-                              probability=0.0,
-                              span=None,
-                              left_child=None,
-                              right_child=None)
-            cky_node = CkyNode(tag=grammar_rule.rule.head.tag,
-                               grammar_rule=grammar_rule,
-                               probability=math.log2(grammar_rule.probability),
-                               span=(j, j + 1),
-                               left_child=to_word,
-                               right_child=None)
-            new_dict = {rule_key: cky_node}
-            # table[j][j] = {"s":CkyNode} --> table[j][j] = {"s":CkyNode, "np":CkyNode}
-            table[j][j].update(new_dict)
+        try:
+            rules = grammar.tails_pointers[word]
+            for r in rules:
+                grammar_rule = rules_dictionary[r]
+                # grammar_rule = X->word
+                # rule_key = X
+                rule_key = grammar_rule.rule.head.tag
+                # "X: X->word"
+                to_word = CkyNode(tag=grammar_rule.rule.head.next.tag,
+                                  grammar_rule=None,
+                                  probability=0.0,
+                                  span=None,
+                                  left_child=None,
+                                  right_child=None)
+                cky_node = CkyNode(tag=grammar_rule.rule.head.tag,
+                                   grammar_rule=grammar_rule,
+                                   probability=math.log2(grammar_rule.probability),
+                                   span=(j, j + 1),
+                                   left_child=to_word,
+                                   right_child=None)
+                new_dict = {rule_key: cky_node}
+                # table[j][j] = {"s":CkyNode} --> table[j][j] = {"s":CkyNode, "np":CkyNode}
+                table[j][j].update(new_dict)
+            print("Finished [%d][%d] in %s seconds" % (j, j, str(time.time() - t1)))
+        except KeyError:
+
+            # We thought that it would have been a great idea, smoothing unknown words
+            # using features like we did in MMN 12 and HMM decoding,
+            # But since words are transliterated from english to hebrew,
+            # it seem a bit pointless to write a probability matrix for a NON-Terminal -> Terminal rule
+            # without knowing any structural information about the words.
+            # Eventually we went with Laplace smoothing "NFRM" | VP->NFRM , S->NFRM ... with probability of 1/|Grammar|
+
+            # Example: given word "NFRM" which there are no rules that generate this word.
+            # Vocabulary = All Word is Grammar [TOP->"alo", X->"alo"]  equals to 1 <-> iterate 1 time tails
+            # pointer
+            # add +1 for each tail that doesnt contain '|'
+            # so V = |Vocabulary|
+            # count each POS Rule and save as q_i
+            # if unknown words -> probability for each tag i is 1 / V+q_i
+            # if known word -> probability is count(POS Rule) + 1 / V+q_i
+            # Note: must be done prior to binarise and percolate
+            for rule_key, unknown_grammar_node in grammar.unknown_words.items():
+                rule_key = unknown_grammar_node.rule.head.tag
+                # "X: X->#"
+                to_word = CkyNode(tag=word,
+                                  grammar_rule=None,
+                                  probability=0.0,
+                                  span=None,
+                                  left_child=None,
+                                  right_child=None)
+                cky_node = CkyNode(tag=unknown_grammar_node.rule.head.tag,
+                                   grammar_rule=unknown_grammar_node,
+                                   probability=math.log2(unknown_grammar_node.probability),
+                                   span=(j, j + 1),
+                                   left_child=to_word,
+                                   right_child=None)
+                new_dict = {rule_key: cky_node}
+                # table[j][j] = {"s":CkyNode} --> table[j][j] = {"s":CkyNode, "np":CkyNode}
+                table[j][j].update(new_dict)
+            print("Finished [%d][%d] in %s seconds" % (j, j, str(time.time() - t1)))
 
         # second part of algorithm // fill rules->rules
         for i in range(j - 1, -1, -1):

@@ -363,22 +363,24 @@ class Grammar(object):
         tot = 0.0
         pos = dict()
 
-        for rule in self.rules_dictionary:
+        for rule in self.rules_dictionary.values():
             if len(rule.rule) == 2 and rule.rule.head.next.is_terminal:
                 tot += 1.0
                 if rule.rule.head.tag not in pos:
                     pos[rule.rule.head.tag] = 1.0
                 else:
                     pos[rule.rule.head.tag] += 1.0
+        l = ['VB','JJ','NNPS','NNP','NN','NNS']
 
         for pos_tag, count in pos.items():
-            pos_probability  = count / tot
-            unknown_word = RuleNode(tag='#', is_head=False, is_terminal=True, next=None)
-            temp_rule = RuleNode(tag=pos_tag, is_head=True, is_terminal=False, back=None, next=unknown_word)
-            unknown_word.back = temp_rule
-            new_temp_rule = Rule(node=temp_rule, is_binarised=False,is_percolated=False)
-            new_grammar_node = GrammarNode(rule=new_temp_rule, probability=pos_probability, count=count)
-            self.unknown_words[new_temp_rule.hash()] = new_grammar_node
+            if pos_tag in l:
+                pos_probability  = count / tot
+                unknown_word = RuleNode(tag='#', is_head=False, is_terminal=True, next=None)
+                temp_rule = RuleNode(tag=pos_tag, is_head=True, is_terminal=False, back=None, next=unknown_word)
+                unknown_word.back = temp_rule
+                new_temp_rule = Rule(node=temp_rule, is_binarised=False,is_percolated=False)
+                new_grammar_node = GrammarNode(rule=new_temp_rule, probability=pos_probability, count=count)
+                self.unknown_words[new_temp_rule.hash()] = new_grammar_node
 
     def binarise(self):
         # {s -> nn jj kk } PROB: 0.5
