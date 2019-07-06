@@ -77,6 +77,28 @@ def probabilistic_unary_cky(words, grammar):
                 table[j][j].update(new_dict)
             print("Finished [%d][%d] in %s seconds" % (j, j, str(time.time() - t1)))
 
+        stack = list()
+        for cky_node in table[j][j].values():
+            stack.append(cky_node)
+        while len(stack) > 0:
+            cky_node = stack.pop()
+            rules = grammar.tails_pointers[cky_node.tag]
+            for r in rules:
+                grammar_rule = rules_dictionary[r]
+                p2 = math.log2(grammar_rule.probability) + cky_node.probability
+                head = grammar_rule.rule.head.tag
+                if head in table[j][j]:
+                    head_cky_node = table[j][j][head]
+                    p1 = head_cky_node.probability
+                    if p1 < p2:
+                        new_cky_node = CkyNode(head, grammar_rule, p2, cky_node.span, cky_node)
+                        table[j][j][head] = new_cky_node
+                        stack.append(new_cky_node)
+                else:
+                    new_cky_node = CkyNode(head, grammar_rule, p2, cky_node.span, cky_node)
+                    table[j][j][head] = new_cky_node
+                    stack.append(new_cky_node)
+
         # second part of algorithm // fill rules->rules
         for i in range(j - 1, -1, -1):
             for k in range(i + 1, j + 1, 1):

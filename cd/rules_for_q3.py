@@ -1,27 +1,17 @@
-import copy
 import time
-import json
-from tqdm import tqdm
-sentences = "(TOP (S (yyQUOT yyQUOT) (S (VP (VB THIH)) (NP (NN NQMH)) (CC W) (ADVP (RB BGDWL))) (yyDOT yyDOT))),\
-(TOP (S (SBAR (S (S (NP (MOD GM) (NP (NN IHWDIM))) (VP (VB NMCAIM)) (ADVP (RB ETH)) (PP (IN EL) (NP (H H) (NN KWWNT)))) (yyQUOT yyQUOT))) (VP (VB AMRW)) (NP (NNT ANFI) (NP (NNP KK))) (PP (IN B) (NP (NNT ET) (NP (NNT MSE) (NP (H H) (NN HLWWIIH))))) (yyDOT yyDOT))),\
-(TOP (S (NP (NN AIF)) (ADVP (RB LA)) (VP (VB NISH)) (VP (VB LHSTIR) (NP (PRP ZAT))) (yyDOT yyDOT))),\
-(TOP (FRAG (NP (NP (MOD LA) (NP (NP (H H) (NN MNHIGIM)) (SBAR (REL F) (S (VP (VB HSITW)) (PP (IN L) (NP (NN RCX))))))) (CC (yySCLN yySCLN)) (NP (MOD LA) (NP (NP (NN XLQIM)) (PP (IN B) (NP (NP (H H) (NN CIBWR)) (ADJP (H H) (JJ ZH)))) (yyCM yyCM) (SBAR (REL F) (S (PP (IN LAWRK) (NP (NNT CIR) (NP (H H) (NN HLWWIIH)))) (VP (VB RQMW)) (NP (NP (NN TWKNIWT)) (SBAR (SQ (ADVP (QW KICD)) (VP (VB LPGWE) (PP (IN B) (NP (NN ERBIM)))) (PP (MOD KBR) (PP (IN B) (NP (NP (H H) (NN IMIM)) (ADJP (H H) (JJ QRWBIM))))))))))))) (yyDOT yyDOT))),\
-(TOP (S (NP (NP (NNT SWPR) (NP (yyQUOT yyQUOT) (NP (NNPP (H H) (NN ARC))) (yyQUOT yyQUOT))) (PP (IN B) (NP (H H) (NN CPWN)))) (yyCM yyCM) (VP (VB MWSIP)) (SBAR (yyCLN yyCLN) (S (NP (NN IRIWT)) (VP (VB NFMEW)) (ADVP (RB ATMWL)) (PP (IN B) (NP (NP (NN FEH)) (NP (CD 2000)) (PP (IN B) (NP (H H) (NN ERB))))) (PP (IN B) (NP (NNP FPREM))) (yyCM yyCM) (ADVP (ADVP (RB SMWK)) (PP (IN L) (NP (NP (NN BITW)) (POS FL) (NP (NP (NNT RAF) (NP (H H) (NN EIRIIH))) (yyCM yyCM) (NP (NNPP (NNP AIBRHIM) (NNPP (NNP NIMR) (NNP XWSIIN)))))))))) (yyDOT yyDOT))),\
-(TOP (S (NP (NN AIF)) (ADVP (RB LA)) (VP (VB NPGE)) (yyDOT yyDOT)))"
+import copy
 
-a_sentences = sentences.split(",")
-
-
-class Node(object):
-    def __init__(self, tag, parent, span=None, is_terminal=False, is_binarised=False):
+class AnnotatedNode(object):
+    def __init__(self, tag, parent, annotated_tag, span=None, is_terminal=False, is_binarised=False):
         self.tag = tag
         self.children = []
         self.parent = parent
+        self.annotated_tag = annotated_tag
         self.span = span
         self.is_terminal = is_terminal
         self.is_binarised = is_binarised
 
-    def add_children(self,node):
+    def add_children(self, node):
         self.children.append(node)
 
 class Tree(object):
@@ -47,12 +37,13 @@ class Tree(object):
         else:
             return treeNode.tag
 
-    def parse_tree(self, parent, bracket_sentence):
+    def parse_tree_with_parent_annotation(self, parent, bracket_sentence):
+
         if parent is not None and parent.is_terminal:
             return
 
         tag = self.parse_string_sequence(bracket_sentence[1:], " ")
-        node = Node(tag=tag, parent=parent, is_terminal=False)
+        node = AnnotatedNode(tag=tag, parent=parent, annotated_tag=parent.tag+"^"+tag, is_terminal=False)
         if self.tree is None:
             self.tree = node
 
@@ -67,7 +58,8 @@ class Tree(object):
         node.span = (start_span, start_span + 1)
 
         if bracket_sentence.count('(') == 1 and bracket_sentence.count(')') == 1:
-            n_node = Node(tag=self.parse_string_reverse_sequence(bracket_sentence[:-1], " "), parent=node, span=node.span, is_terminal=True)
+            tag = self.parse_string_reverse_sequence(bracket_sentence[:-1], " ")
+            n_node = AnnotatedNode(tag=tag, parent=node, annotated_tag=tag, span=node.span, is_terminal=True)
             node.add_children(n_node)
             return node
 
@@ -93,11 +85,17 @@ class Tree(object):
 
         return node
 
+    # TODO: build grammar from annotated parent tree. For example:
+    # NP ^ S → Det ^ NP   Noun ^ NP
+    # NP ^ S → Pro ^ NP
+    # NP ^ VP → Det ^ NP   Noun ^ NP
+    # NP ^ S → Pro ^ NP
+
     def build_tree_from_cky_root_node(self, ckynode, parent=None):
 
         if ckynode.left_child is None and ckynode.right_child is None:
             # Todo: could is_terminal be false here?
-            return Node(tag=ckynode.tag, parent=parent, is_terminal=True)
+            return AnnotatedNode(tag=ckynode.tag, parent=parent, is_terminal=True)
 
         # if parent is None and not ckynode.tag == "TOP":
         #     top_parent = Node(tag="TOP", parent=None, span=ckynode.span)
@@ -110,7 +108,7 @@ class Tree(object):
         #     parent = Node(ckynode.tag, parent=parent, span=ckynode.span, is_terminal=False)
         # else:
         #     print(ckynode.tag + " is binarised")
-        parent = Node(ckynode.tag, parent=parent, span=ckynode.span, is_terminal=False, is_binarised=ckynode.grammar_rule.rule.is_binarised)
+        parent = AnnotatedNode(ckynode.tag, parent=parent, span=ckynode.span, is_terminal=False, is_binarised=ckynode.grammar_rule.rule.is_binarised)
         # one time - create root of tree
         if self.tree is None:
             self.tree = parent
@@ -125,8 +123,8 @@ class Tree(object):
     def de_binarise(self, node=None):
         # TODO: check before automatically adding TOP-S-
         if node is None and self.tree.tag is not "TOP":
-            t_node = Node("TOP", None, self.tree.span, False, False)
-            s_node = Node("S", t_node, self.tree.span, False, False)
+            t_node = AnnotatedNode("TOP", None, self.tree.span, False, False)
+            s_node = AnnotatedNode("S", t_node, self.tree.span, False, False)
             t_node.add_children(s_node)
             s_node.add_children(self.tree)
             self.tree.parent = s_node
@@ -207,10 +205,10 @@ class Rule(object):
 
     def hash(self):
         temp = self.head
-        hash_key = temp.tag + "->"
+        hash_key = temp.annotated_tag + "->"
         while temp.next is not None:
             temp = temp.next
-            hash_key += temp.tag
+            hash_key += temp.annotated_tag
             if temp.next is not None:
                 hash_key += " "
         return hash_key
@@ -256,11 +254,13 @@ class Grammar(object):
         if node is None or node.is_terminal:
             return
 
-        rule = Rule(RuleNode(tag=node.tag, is_head=True))
-        for children in node.children:
-            rule.insert(RuleNode(tag=children.tag,
-                                 is_head=False,
-                                 is_terminal=children.is_terminal))
+        if len(node.children) == 1 and node.children[0].is_terminal:
+            rule = Rule(RuleNode(tag=node.tag, is_head=True))
+            rule.insert(RuleNode(tag=node.children[0].tag, is_head=False, is_terminal=node.children[0].is_terminal))
+        else:
+            rule = Rule(RuleNode(tag=node.annotated_tag, is_head=True))
+            for children in node.children:
+                rule.insert(RuleNode(tag=children.annotated_tag, is_head=False, is_terminal=children.is_terminal))
 
         grammar_key = rule.hash()
         if rule.head.tag in self.heads_count:
@@ -284,7 +284,7 @@ class Grammar(object):
 
     def calculate_probabilities(self):
         for key, grammar_rule in self.rules_dictionary.items():
-            grammar_rule.probability = grammar_rule.count / self.heads_count[grammar_rule.rule.head.tag]
+            grammar_rule.probability = grammar_rule.count / self.heads_count[grammar_rule.rule.head.annotated_tag]
 
 
     def gen_unknown_word_probability(self):
@@ -478,23 +478,4 @@ class Grammar(object):
             if key not in self.tails_pointers:
                 self.tails_pointers[key] = set()
             self.tails_pointers[key].add(rule_hash)
-
-    #def build_tails(self):
-    # root : SBAR-yyDOT ==> TOP => NP SBAR YYDOT
-    #
-    def to_rule_search(self, to_rule):
-       # find all X such that X -> to_rule
-       li = list()
-       for key, gn in self.rules_dictionary.items():
-           temp = gn.rule.head.next
-           if temp.chain_tags() == to_rule:
-               li.append(gn)
-       return li
-
-
-
-
-
-
-
 
